@@ -1,0 +1,613 @@
+:root {
+  /* Apple 系统色板 */
+  --bg-color: #F5F5F7;
+  /* 浅灰背景 */
+  --card-bg: #FFFFFF;
+  /* 纯白卡片 */
+  --text-primary: #1D1D1F;
+  /* 深灰黑 */
+  --text-secondary: #86868B;
+  /* 次级灰 */
+  --accent-color: #0071E3;
+  /* 高级蓝 */
+  --accent-hover: #0077ED;
+  --danger-color: #FF3B30;
+  /* 警告色 */
+  --border-color: #E5E5EA;
+  /* 分割线 */
+
+  /* 阴影与圆角 */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
+  --radius-lg: 14px;
+  --radius-md: 10px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro Text", "Helvetica Neue", "Microsoft YaHei", "PingFang SC", sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  /* macOS 字体平滑；Windows 上自动降级到 Segoe UI 和 Microsoft YaHei */
+}
+
+/* === 顶部导航 (毛玻璃) === */
+.navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: saturate(180%) blur(20px);
+  /* 核心：毛玻璃 */
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+}
+
+.nav-content {
+  width: 100%;
+  max-width: 900px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 18px;
+  color: var(--text-primary);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* === 按钮与控件 === */
+.separator {
+  width: 1px;
+  height: 24px;
+  background: #D1D1D6;
+}
+
+.toggle-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-primary);
+}
+
+.toggle-control input {
+  accent-color: var(--accent-color);
+  /* 浏览器原生支持的强调色 */
+  width: 16px;
+  height: 16px;
+}
+
+.btn-icon,
+.btn-primary,
+.btn-text-danger {
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  transition: all 0.2s ease;
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.btn-icon {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-primary);
+}
+
+.btn-icon:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.btn-primary {
+  background: var(--accent-color);
+  color: white;
+  box-shadow: 0 2px 6px rgba(0, 113, 227, 0.3);
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.btn-text-danger {
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+}
+
+.btn-text-danger:hover {
+  color: var(--danger-color);
+  background: rgba(255, 59, 48, 0.1);
+}
+
+/* === 导出菜单 === */
+.export-menu-wrapper {
+  position: relative;
+}
+
+#export-btn {
+  position: relative;
+  z-index: 10;
+}
+
+.export-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: var(--card-bg);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+  min-width: 200px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-10px) scale(0.98);
+  transform-origin: top right;
+  transition: all 0.16s ease;
+  z-index: 20;
+  display: none;
+}
+
+.export-menu.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  display: block;
+  animation: popup 220ms cubic-bezier(.2, .8, .2, 1);
+}
+
+.export-option {
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 12px 16px;
+  text-align: left;
+  transition: background-color 0.2s ease;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.export-option:hover {
+  background-color: rgba(0, 113, 227, 0.08);
+}
+
+/* 导出选项弹出动效：初始微位移+透明，出现时缩放&弹性回弹，带错位延迟 */
+.export-menu:not(.show) .export-option {
+  /* 隐藏状态下保持不可见，避免动画填充导致一直不可见 */
+  opacity: 0;
+  transform: translateY(6px) scale(0.98);
+}
+
+.export-menu.show .export-option {
+  will-change: transform, opacity;
+  animation: optionPop 260ms cubic-bezier(.2, .8, .2, 1) forwards;
+  animation-delay: 0s;
+}
+
+.export-menu.show .export-option:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.export-menu.show .export-option:nth-child(2) {
+  animation-delay: 0.03s;
+}
+
+.export-menu.show .export-option:nth-child(3) {
+  animation-delay: 0.06s;
+}
+
+.export-menu.show .export-option:nth-child(4) {
+  animation-delay: 0.09s;
+}
+
+@keyframes popup {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+
+  60% {
+    transform: translateY(2px) scale(1.02);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes optionPop {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+
+  60% {
+    transform: translateY(-2px) scale(1.02);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+.export-option:first-child {
+  border-top: none;
+}
+
+.format-name {
+  font-weight: 600;
+  display: block;
+}
+
+.format-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: block;
+}
+
+/* 导出选项容器 */
+.export-options-container {
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* 导出设置 */
+.export-settings {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.export-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-primary);
+}
+
+.export-checkbox input[type="checkbox"] {
+  accent-color: var(--accent-color);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* === 主内容区 === */
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.header-placeholder {
+  height: 60px;
+}
+
+.list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 20px;
+  padding: 0 5px;
+}
+
+.list-header h2 {
+  font-size: 28px;
+  margin: 0;
+  letter-spacing: -0.5px;
+}
+
+/* === 笔记卡片列表 === */
+.grid-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.note-card {
+  /* 更强的磨砂玻璃效果：半透明背景 + backdrop-filter */
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: saturate(180%) blur(6px);
+  -webkit-backdrop-filter: saturate(180%) blur(6px);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s ease, transform 0.2s ease, background 0.2s ease, backdrop-filter 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  position: relative;
+  overflow: hidden;
+  /* 鼠标位置变量：用于定位光晕 */
+  --mouse-x: 50%;
+  --mouse-y: 50%;
+}
+
+.note-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-4px);
+  /* 悬停时增强模糊与透光感 */
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: saturate(200%) blur(14px);
+  -webkit-backdrop-filter: saturate(200%) blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.note-card:hover::after {
+  opacity: 1;
+  filter: blur(14px);
+}
+
+/* 在悬停时增加多层外阴影以增强立体感 */
+.note-card:hover {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08), 0 12px 40px rgba(0, 0, 0, 0.06), 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.note-content {
+  font-size: 16px;
+  line-height: 1.7;
+  color: #333;
+  margin-bottom: 16px;
+  white-space: pre-wrap;
+}
+
+.note-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.meta-source a {
+  color: var(--accent-color);
+  text-decoration: none;
+  font-weight: normal;
+}
+
+.meta-source a:hover {
+  text-decoration: underline;
+}
+
+/* 删除按钮 (悬浮出现) */
+.delete-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #f2f2f7;
+  color: #8e8e93;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  /* 默认隐藏 */
+  transition: all 0.2s;
+  font-size: 16px;
+}
+
+/* 鼠标悬停卡片时显示删除按钮 */
+.note-card:hover .delete-btn {
+  opacity: 1;
+}
+
+/* 编辑状态下隐藏删除按钮 */
+.note-card.editing .delete-btn {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.delete-btn:hover {
+  background: #FF3B30;
+  color: white;
+}
+
+
+/* === 打印 / PDF 导出专用样式 === */
+.print-only {
+  display: none !important;
+}
+
+@media print {
+  @page {
+    margin: 20mm;
+  }
+
+  body {
+    background: white;
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Microsoft YaHei", sans-serif;
+    /* 无衬线体，跨平台最佳显示 */
+    color: #111;
+  }
+
+  .navbar,
+  .list-header button,
+  .delete-btn {
+    display: none !important;
+  }
+
+  .header-placeholder {
+    display: none;
+  }
+
+  .container {
+    max-width: 100%;
+    padding: 0;
+    margin: 0;
+  }
+
+  /* 隐藏屏幕专用链接 */
+  .screen-only {
+    display: none !important;
+  }
+
+  /* 显示打印专用信息 */
+  .print-only {
+    display: inline !important;
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Microsoft YaHei", sans-serif;
+    font-size: 10pt;
+    color: #555;
+  }
+
+  .list-header h2 {
+    text-align: center;
+    font-size: 18pt;
+    margin-bottom: 30px;
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+
+  .note-card {
+    box-shadow: none;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    margin-bottom: 30px;
+    page-break-inside: avoid;
+  }
+
+  .note-content {
+    font-size: 12pt;
+    line-height: 1.8;
+    color: #000;
+    margin-bottom: 8px;
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Microsoft YaHei", sans-serif;
+  }
+
+  .note-meta {
+    border-top: none;
+    padding-top: 4px;
+    font-size: 9pt;
+    color: #666;
+    display: block;
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Microsoft YaHei", sans-serif;
+  }
+
+  .meta-time::after {
+    content: " | ";
+    color: #ccc;
+  }
+
+  a {
+    text-decoration: none;
+    color: black;
+  }
+}
+
+.note-content {
+  font-size: 16px;
+  line-height: 1.7;
+  color: #333;
+  margin-bottom: 16px;
+  white-space: pre-wrap;
+
+  /* 编辑相关样式 */
+  padding: 8px;
+  margin-left: -8px;
+  /* 抵消 padding 保证对齐 */
+  border-radius: 8px;
+  transition: background-color 0.2s ease;
+  outline: none;
+  /* 去掉默认的蓝色边框 */
+  cursor: text;
+}
+
+/* 鼠标悬停在可编辑区域 */
+.note-content:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+/* 正在编辑的状态 */
+.note-content:focus {
+  background-color: rgba(0, 113, 227, 0.05);
+  /* 淡淡的苹果蓝 */
+  box-shadow: inset 0 0 0 1px rgba(0, 113, 227, 0.1);
+}
+
+/* 打印时去掉背景色和交互提示 */
+@media print {
+  .note-content {
+    padding: 0;
+    margin: 0;
+    background: none !important;
+    box-shadow: none !important;
+  }
+}
+
+/* 屏幕下的打印/导出预览模式：
+   由 JS 在导出 PDF 前添加 `printing-mode` 类，
+   用于在屏幕上也关闭所有动效与悬浮样式，避免打印预览时看到浮起动画 */
+.printing-mode,
+.printing-mode * {
+  animation: none !important;
+  transition: none !important;
+}
+
+.printing-mode .note-card,
+.printing-mode .note-card:hover {
+  transform: none !important;
+  box-shadow: none !important;
+  background: rgba(255, 255, 255, 1) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: none !important;
+}
+
+.printing-mode .note-card::after {
+  opacity: 0 !important;
+  filter: none !important;
+}
+
+.printing-mode .delete-btn,
+.printing-mode .navbar,
+.printing-mode .list-header button,
+.printing-mode .export-menu {
+  display: none !important;
+}
+
+/* 当需要在打印预览/导出时隐藏来源（由 JS 根据选项添加 .hide-source） */
+.printing-mode.hide-source .meta-source,
+.printing-mode.hide-source .print-only,
+.printing-mode.hide-source .screen-only {
+  display: none !important;
+}

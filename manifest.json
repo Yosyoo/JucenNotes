@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "句存 - 网页轻笔记",
+  "version": "1.0",
+  "description": "右键收藏网页文字，支持导出 PDF/Word/TXT。",
+  "permissions": [
+    "contextMenus",
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "打开笔记管理",
+    "default_icon": "icon.png"
+  },
+  "icons": {
+    "128": "icon.png"
+  }
+}

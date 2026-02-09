@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我的笔记</title>
+  <link rel="stylesheet" href="manager.css">
+</head>
+
+<body>
+
+  <nav class="navbar">
+    <div class="nav-content">
+      <div class="brand">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+        </svg>
+        <span>句存</span>
+      </div>
+
+      <div class="toolbar">
+        <div class="action-group">
+          <div class="export-menu-wrapper">
+            <button id="export-btn" class="btn-primary" title="导出笔记">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              导出
+            </button>
+            <div id="export-menu" class="export-menu frosted">
+              <div class="export-options-container">
+                <button class="export-option" data-format="txt">
+                  <span class="format-name">TXT</span>
+                  <span class="format-desc">纯文本格式</span>
+                </button>
+                <button class="export-option" data-format="word">
+                  <span class="format-name">Word</span>
+                  <span class="format-desc">Microsoft Word</span>
+                </button>
+                <button class="export-option" data-format="pdf">
+                  <span class="format-name">PDF</span>
+                  <span class="format-desc">便携式文档</span>
+                </button>
+              </div>
+              <div class="export-settings">
+                <label class="export-checkbox">
+                  <input type="checkbox" id="export-include-time" checked>
+                  <span>包含时间</span>
+                </label>
+                <label class="export-checkbox">
+                  <input type="checkbox" id="export-include-source" checked>
+                  <span>包含来源</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container frosted">
+    <div class="header-placeholder"></div>
+    <div class="content-wrapper">
+      <div class="list-header">
+        <h2>全部笔记</h2>
+        <button id="clear-all" class="btn-text-danger">清空</button>
+      </div>
+
+      <div id="note-list" class="grid-layout">
+      </div>
+    </div>
+  </main>
+
+  <script src="manager.js"></script>
+</body>
+
+</html>
