@@ -15,7 +15,8 @@
 
 ## 🚀 快速开始
 ### 下载安装
-Chrome搜索“句存 - 网页轻笔记”，安装插件（正在审核）
+Chrome搜索“句存 - 网页轻笔记”，安装插件
+https://chromewebstore.google.com/detail/%E5%8F%A5%E5%AD%98-%E7%BD%91%E9%A1%B5%E8%BD%BB%E7%AC%94%E8%AE%B0/obhpcgebblpaoogoiemkdcjnjnelmahn
 
 ## 📖 使用说明
 
