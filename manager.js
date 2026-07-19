@@ -9,8 +9,14 @@ const DOM = {
   listEl: document.getElementById('note-list'),           // 笔记列表容器
   clearBtn: document.getElementById('clear-all'),         // 清空全部按钮
   exportBtn: document.getElementById('export-btn'),       // 导出按钮
-  exportMenu: document.getElementById('export-menu')      // 导出菜单
+  exportMenu: document.getElementById('export-menu'),     // 导出菜单
+  searchInput: document.getElementById('search-input'),   // 搜索输入框
+  searchClear: document.getElementById('search-clear'),   // 清除搜索按钮
+  searchStatus: document.getElementById('search-status')  // 搜索结果提示
 };
+
+let allNotes = [];
+let searchQuery = '';
 
 // ==================== 页面初始化 ====================
 document.addEventListener('DOMContentLoaded', init);
@@ -42,6 +48,17 @@ function bindEvents() {
 
   // 点击菜单外部关闭菜单
   document.addEventListener('click', closeExportMenuOnClickOutside);
+
+  DOM.searchInput.addEventListener('input', (event) => {
+    searchQuery = event.target.value;
+    renderFilteredNotes();
+  });
+
+  DOM.searchInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && searchQuery) clearSearch();
+  });
+
+  DOM.searchClear.addEventListener('click', clearSearch);
 }
 
 // ==================== 笔记管理 ====================
@@ -51,8 +68,27 @@ function bindEvents() {
  */
 function loadNotes() {
   chrome.storage.local.get({ notes: [] }, (result) => {
-    renderNotes(result.notes);
+    allNotes = result.notes;
+    renderFilteredNotes();
   });
+}
+
+function renderFilteredNotes() {
+  const filteredNotes = NoteUtils.filterNotes(allNotes, searchQuery);
+  renderNotes(filteredNotes);
+
+  const hasQuery = searchQuery.trim().length > 0;
+  DOM.searchClear.hidden = !hasQuery;
+  DOM.searchStatus.textContent = hasQuery
+    ? `找到 ${filteredNotes.length} 条笔记，共 ${allNotes.length} 条`
+    : `共 ${allNotes.length} 条笔记`;
+}
+
+function clearSearch() {
+  searchQuery = '';
+  DOM.searchInput.value = '';
+  renderFilteredNotes();
+  DOM.searchInput.focus();
 }
 
 /**
@@ -63,9 +99,9 @@ function renderNotes(notes) {
   DOM.listEl.innerHTML = '';
 
   // 如果没有笔记，显示空状态提示
-  if (notes.length === 0) {
+  if (allNotes.length === 0) {
     DOM.listEl.innerHTML = `
-      <div style="text-align:center; padding: 60px 0; color:#86868B;">
+      <div class="empty-state">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#D1D1D6" stroke-width="1">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
           <polyline points="14 2 14 8 20 8"></polyline>
@@ -74,6 +110,18 @@ function renderNotes(notes) {
           <polyline points="10 9 9 9 8 9"></polyline>
         </svg>
         <p>- 浮生暂寄梦中梦 -</p>
+      </div>`;
+    return;
+  }
+
+  if (notes.length === 0) {
+    DOM.listEl.innerHTML = `
+      <div class="empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#D1D1D6" stroke-width="1">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <p>没有找到匹配的笔记</p>
       </div>`;
     return;
   }
@@ -96,7 +144,7 @@ function createNoteCard(note) {
   const div = document.createElement('div');
   div.className = 'note-card';
 
-  const pageTitle = note.sourceTitle || note.sourceUrl;
+  const pageTitle = note.sourceTitle || note.sourceUrl || '未知网页';
   const metaHtml = buildMetaHtml(note, pageTitle);
 
   div.innerHTML = `
@@ -104,7 +152,7 @@ function createNoteCard(note) {
     <div class="note-content" 
          contenteditable="true" 
          data-id="${note.id}" 
-         title="点击即可编辑内容">${escapeHtml(note.content)}</div>
+         title="点击即可编辑内容">${NoteUtils.escapeHtml(note.content)}</div>
     ${metaHtml}
   `;
 
@@ -120,9 +168,9 @@ function createNoteCard(note) {
 function buildMetaHtml(note, pageTitle) {
   return `<div class="note-meta">
     <span class="meta-time">${note.timestamp}</span>
-    <span class="meta-source screen-only">来自: <a href="${note.sourceUrl}" target="_blank">${escapeHtml(pageTitle)}</a></span>
+    <span class="meta-source screen-only">来自: <a href="${NoteUtils.escapeHtml(note.sourceUrl)}" target="_blank">${NoteUtils.escapeHtml(pageTitle)}</a></span>
     <span class="meta-source print-only" style="display:none">
-      来自: <a href="${note.sourceUrl}">${escapeHtml(pageTitle)}</a>
+      来自: <a href="${NoteUtils.escapeHtml(note.sourceUrl)}">${NoteUtils.escapeHtml(pageTitle)}</a>
     </span>
   </div>`;
 }
@@ -183,6 +231,8 @@ function updateNoteContent(id, newContent) {
     // 仅在内容确实改变时更新存储
     if (noteIndex !== -1 && result.notes[noteIndex].content !== newContent) {
       result.notes[noteIndex].content = newContent;
+      const cachedNote = allNotes.find(note => note.id === id);
+      if (cachedNote) cachedNote.content = newContent;
       chrome.storage.local.set({ notes: result.notes });
     }
   });
@@ -369,7 +419,7 @@ function exportAsWord() {
     // 循环添加每条笔记
     result.notes.forEach(note => {
       html += `<div class="note-item">`;
-      html += `<div class="note-title">${escapeHtml(note.content)}</div>`;
+      html += `<div class="note-title">${NoteUtils.textToHtmlWithLineBreaks(note.content)}</div>`;
 
       // 根据用户选择添加元数据
       if (opts.time || opts.source) {
@@ -377,7 +427,7 @@ function exportAsWord() {
         if (opts.time) html += `<span class="note-meta-line">时间: ${note.timestamp}</span>`;
         if (opts.source) {
           const title = note.sourceTitle || note.sourceUrl;
-          html += `<span class="note-meta-line">来源: <a href="${note.sourceUrl}">${escapeHtml(title)}</a></span>`;
+          html += `<span class="note-meta-line">来源: <a href="${NoteUtils.escapeHtml(note.sourceUrl)}">${NoteUtils.escapeHtml(title)}</a></span>`;
         }
         html += `</div>`;
       }
@@ -434,19 +484,4 @@ function downloadFile(blob, filename) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
-}
-
-/**
- * 转义 HTML 特殊字符
- * @param {string} text - 需要转义的文本
- * @returns {string} 转义后的文本
- */
-function escapeHtml(text) {
-  if (!text) return "";
-  return text
-    .replace(/&/g, "&amp;")    // & → &amp;
-    .replace(/</g, "&lt;")     // < → &lt;
-    .replace(/>/g, "&gt;")     // > → &gt;
-    .replace(/"/g, "&quot;")   // " → &quot;
-    .replace(/'/g, "&#039;");  // ' → &#039;
 }

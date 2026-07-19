@@ -333,6 +333,79 @@ body {
   letter-spacing: -0.5px;
 }
 
+.search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 14px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+#search-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  padding: 11px 42px;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+#search-input:focus {
+  background: #fff;
+  border-color: rgba(0, 113, 227, 0.5);
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.12);
+}
+
+#search-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.search-clear {
+  position: absolute;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 50%;
+  background: #E5E5EA;
+  color: #636366;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.search-clear:hover {
+  background: #D1D1D6;
+}
+
+.search-clear[hidden] {
+  display: none;
+}
+
+.search-status {
+  min-height: 18px;
+  margin: 0 4px 14px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.empty-state {
+  padding: 60px 0;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
 /* === 笔记卡片列表 === */
 .grid-layout {
   display: flex;
@@ -461,6 +534,8 @@ body {
 
   .navbar,
   .list-header button,
+  .search-wrapper,
+  .search-status,
   .delete-btn {
     display: none !important;
   }
@@ -601,6 +676,8 @@ body {
 .printing-mode .delete-btn,
 .printing-mode .navbar,
 .printing-mode .list-header button,
+.printing-mode .search-wrapper,
+.printing-mode .search-status,
 .printing-mode .export-menu {
   display: none !important;
 }
