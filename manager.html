@@ -72,11 +72,23 @@
         <button id="clear-all" class="btn-text-danger">清空</button>
       </div>
 
+      <div class="search-wrapper" role="search">
+        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input id="search-input" type="search" placeholder="搜索正文、来源或时间" autocomplete="off" aria-label="搜索笔记">
+        <button id="search-clear" class="search-clear" type="button" aria-label="清除搜索" title="清除搜索" hidden>×</button>
+      </div>
+      <p id="search-status" class="search-status" aria-live="polite"></p>
+
       <div id="note-list" class="grid-layout">
       </div>
     </div>
   </main>
 
+  <script src="note-utils.js"></script>
   <script src="manager.js"></script>
 </body>
 

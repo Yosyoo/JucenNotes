@@ -2,13 +2,15 @@
 
 一个优雅高效的 Chrome 扩展，用于快速收藏网页内容，支持多格式导出。
 
-![License](https://img.shields.io/badge/license-MIT-green) ![Version](https://img.shields.io/badge/version-1.0-blue)
+![License](https://img.shields.io/badge/license-MIT-green) ![Version](https://img.shields.io/badge/version-1.1.0-blue)
 
 ## 📋 功能特性
 
 - **快速收藏** - 在任何网页上右键选中文字，一键保存为笔记
 - **本地存储** - 所有笔记存储在本地，隐私安全
 - **实时编辑** - 点击笔记内容即可编辑，自动保存修改
+- **保留排版** - 收藏网页选区时保留段落、列表、表格与显式换行
+- **快速搜索** - 按正文、来源标题、网址或时间即时筛选笔记
 - **智能导出** - 支持导出为 TXT、Word、PDF 三种格式
 - **灵活选项** - 导出时可选择是否包含时间戳和来源链接
 - **设计简洁** - 现代 UI设计
@@ -26,6 +28,7 @@ https://chromewebstore.google.com/detail/%E5%8F%A5%E5%AD%98-%E7%BD%91%E9%A1%B5%E
 |------|------|
 | **添加笔记** | 网页右键菜单 → 选中文字 → 添加笔记 |
 | **编辑笔记** | 点击笔记内容 → 直接输入修改 → 点击外部自动保存 |
+| **搜索笔记** | 在列表上方输入正文、来源或时间关键词，可用空格组合多个关键词 |
 | **删除笔记** | 鼠标悬停卡片 → 点击右上角 × 按钮 |
 | **清空全部** | 点击右上角 "清空" 按钮（需确认） |
 
