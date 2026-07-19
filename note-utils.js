@@ -36,7 +36,12 @@
     return escapeHtml(text).replace(/\r\n?|\n/g, '<br>');
   }
 
-  const api = { filterNotes, escapeHtml, textToHtmlWithLineBreaks };
+  function selectNotes(notes, selectedIds) {
+    const selected = selectedIds instanceof Set ? selectedIds : new Set(selectedIds || []);
+    return notes.filter(note => selected.has(note.id));
+  }
+
+  const api = { filterNotes, escapeHtml, textToHtmlWithLineBreaks, selectNotes };
 
   if (typeof module !== 'undefined') module.exports = api;
   globalScope.NoteUtils = api;
