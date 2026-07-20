@@ -20,7 +20,7 @@ const state = {
 const DOM = {};
 let toastTimer;
 let exportPreviewTimer;
-const exportState = { format: 'pdf', zoom: .75, preview: null };
+const exportState = { format: 'pdf', zoom: .75, preview: null, localFontsLoaded: false };
 
 document.addEventListener('DOMContentLoaded', init);
 
@@ -51,6 +51,8 @@ function cacheDom() {
     exportPaperSize: document.getElementById('export-paper-size'),
     exportMargin: document.getElementById('export-margin'),
     exportFontFamily: document.getElementById('export-font-family'),
+    exportLocalFontList: document.getElementById('export-local-font-list'),
+    exportLoadFonts: document.getElementById('export-load-fonts'),
     exportFontSize: document.getElementById('export-font-size'),
     exportLineHeight: document.getElementById('export-line-height'),
     previewZoomValue: document.getElementById('preview-zoom-value'),
@@ -85,9 +87,11 @@ function bindEvents() {
   document.querySelectorAll('[data-export-format]').forEach(button => button.addEventListener('click', () => setExportFormat(button.dataset.exportFormat)));
   document.querySelectorAll('[data-export-option]').forEach(button => button.addEventListener('click', () => selectExportOption(button)));
   [DOM.exportPaperSize, DOM.exportMargin, DOM.exportFontFamily, DOM.exportLineHeight].forEach(control => control.addEventListener('change', scheduleExportPreview));
+  DOM.exportFontFamily.addEventListener('input', scheduleExportPreview);
   ['export-include-category', 'export-include-time', 'export-include-source', 'export-include-page-number'].forEach(id => document.getElementById(id).addEventListener('change', scheduleExportPreview));
   document.getElementById('export-font-decrease').addEventListener('click', () => changeExportFontSize(-1));
   document.getElementById('export-font-increase').addEventListener('click', () => changeExportFontSize(1));
+  DOM.exportLoadFonts.addEventListener('click', loadLocalFonts);
   document.getElementById('export-reset').addEventListener('click', resetExportSettings);
   document.getElementById('preview-zoom-out').addEventListener('click', () => changePreviewZoom(-.1));
   document.getElementById('preview-zoom-in').addEventListener('click', () => changePreviewZoom(.1));
@@ -546,7 +550,7 @@ function getExportOptions() {
     orientation: document.querySelector('[data-export-option="orientation"].active')?.dataset.value || 'portrait',
     margin: DOM.exportMargin.value,
     template: document.querySelector('[data-export-option="template"].active')?.dataset.value || 'minimal',
-    fontFamily: DOM.exportFontFamily.value,
+    fontFamily: getExportFontSelection(),
     fontSize: Number(DOM.exportFontSize.value) || 14,
     lineHeight: DOM.exportLineHeight.value
   };
@@ -566,7 +570,7 @@ function changeExportFontSize(delta) {
 function resetExportSettings() {
   DOM.exportPaperSize.value = 'a4';
   DOM.exportMargin.value = 'standard';
-  DOM.exportFontFamily.value = 'sans';
+  DOM.exportFontFamily.value = '系统字体';
   DOM.exportFontSize.value = 14;
   DOM.exportLineHeight.value = 'comfortable';
   document.querySelectorAll('[data-export-option="orientation"]').forEach(button => button.classList.toggle('active', button.dataset.value === 'portrait'));
@@ -574,6 +578,55 @@ function resetExportSettings() {
   ['export-include-category', 'export-include-time', 'export-include-source', 'export-include-page-number'].forEach(id => { document.getElementById(id).checked = true; });
   exportState.zoom = .75;
   scheduleExportPreview();
+}
+
+function getExportFontSelection() {
+  const value = DOM.exportFontFamily.value.trim();
+  if (!value || value === '系统字体') return 'sans';
+  if (value === '宋体') return 'serif';
+  return `local:${value}`;
+}
+
+async function loadLocalFonts() {
+  if (exportState.localFontsLoaded) {
+    DOM.exportFontFamily.focus();
+    showToast('本机字体列表已载入');
+    return;
+  }
+  if (typeof window.queryLocalFonts !== 'function') {
+    DOM.exportFontFamily.focus();
+    showToast('当前浏览器不支持读取字体列表，可直接输入字体名称');
+    return;
+  }
+
+  DOM.exportLoadFonts.disabled = true;
+  DOM.exportLoadFonts.textContent = '读取中';
+  try {
+    const fonts = await window.queryLocalFonts();
+    const families = [...new Set(fonts
+      .map(font => String(font.family || font.fullName || '').trim())
+      .filter(Boolean))]
+      .filter(name => !['系统字体', '宋体'].includes(name))
+      .sort((left, right) => left.localeCompare(right, 'zh-CN'));
+    const fragment = document.createDocumentFragment();
+    ['系统字体', '宋体', ...families].forEach(name => {
+      const option = document.createElement('option');
+      option.value = name;
+      fragment.appendChild(option);
+    });
+    DOM.exportLocalFontList.replaceChildren(fragment);
+    exportState.localFontsLoaded = true;
+    document.getElementById('export-font-hint').textContent = `已载入 ${families.length} 种本机字体，可输入名称筛选`;
+    DOM.exportFontFamily.focus();
+    showToast(`已载入 ${families.length} 种本机字体`);
+  } catch (error) {
+    if (error?.name !== 'NotAllowedError') console.warn('读取本机字体失败', error);
+    DOM.exportFontFamily.focus();
+    showToast('未获得字体权限，可直接输入字体名称');
+  } finally {
+    DOM.exportLoadFonts.disabled = false;
+    DOM.exportLoadFonts.textContent = '字体库';
+  }
 }
 
 function changePreviewZoom(delta) {
@@ -666,9 +719,7 @@ function exportAsWord() {
 }
 
 function buildWordDocument(model, options) {
-  const fontFamily = options.fontFamily === 'serif'
-    ? 'SimSun, "Songti SC", serif'
-    : '"Microsoft YaHei", "Segoe UI", sans-serif';
+  const fontFamily = getWordFontFamily(options.fontFamily);
   const fontSize = Math.max(9, Math.round(options.fontSize * .82));
   const lineHeight = { compact: 1.5, comfortable: 1.72, relaxed: 1.95 }[options.lineHeight] || 1.72;
   const margin = { compact: '1.35cm', standard: '1.9cm', wide: '2.55cm' }[options.margin] || '1.9cm';
@@ -738,6 +789,17 @@ function hexToWordTint(hex) {
   const number = Number.parseInt(hex.slice(1), 16);
   const channels = [(number >> 16) & 255, (number >> 8) & 255, number & 255];
   return `rgb(${channels.map(channel => Math.round(channel + (255 - channel) * .9)).join(',')})`;
+}
+
+function getWordFontFamily(selection) {
+  if (selection === 'serif') return 'SimSun, "Songti SC", serif';
+  if (!selection?.startsWith('local:')) return '"Microsoft YaHei", "Segoe UI", sans-serif';
+  const family = sanitizeLocalFontName(selection.slice(6));
+  return family ? `"${family}", "Microsoft YaHei", sans-serif` : '"Microsoft YaHei", "Segoe UI", sans-serif';
+}
+
+function sanitizeLocalFontName(value) {
+  return String(value || '').replace(/[\r\n\f"\\;{}<>]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 async function exportAsPdf() {

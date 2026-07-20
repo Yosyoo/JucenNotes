@@ -190,9 +190,16 @@
               <button class="template-card" type="button" data-export-option="template" data-value="manuscript"><span class="template-thumb manuscript-thumb"></span><b>文稿</b></button>
               <button class="template-card" type="button" data-export-option="template" data-value="cards"><span class="template-thumb cards-thumb"></span><b>卡片</b></button>
             </div>
-            <label class="export-control-row"><span>字体</span>
-              <select id="export-font-family"><option value="sans">系统字体</option><option value="serif">宋体</option></select>
+            <label class="export-control-row export-font-row"><span>字体</span>
+              <span class="export-font-picker">
+                <input id="export-font-family" type="text" value="系统字体" list="export-local-font-list" autocomplete="off" aria-describedby="export-font-hint">
+                <button id="export-load-fonts" type="button" title="读取本机已安装字体">字体库</button>
+              </span>
             </label>
+            <datalist id="export-local-font-list">
+              <option value="系统字体"></option><option value="宋体"></option>
+            </datalist>
+            <p id="export-font-hint" class="export-font-hint">可直接输入字体名称，或读取本机字体列表</p>
             <div class="export-control-row"><span>字体大小</span>
               <div class="number-stepper"><button id="export-font-decrease" type="button" aria-label="减小字号">−</button><output id="export-font-size">14</output><button id="export-font-increase" type="button" aria-label="增大字号">＋</button></div>
             </div>

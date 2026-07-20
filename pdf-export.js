@@ -20,7 +20,7 @@
     const margin = Math.round(Math.min(page.width, page.height) * (MARGIN_RATIOS[options.margin] || MARGIN_RATIOS.standard));
     const footerSpace = options.pageNumber ? 30 : 12;
     const contentBottom = page.height - margin - footerSpace;
-    const bodyFont = options.fontFamily === 'serif' ? SERIF_FONT : SANS_FONT;
+    const bodyFont = resolveFontFamily(options.fontFamily);
     const lineHeight = Math.round(options.fontSize * (LINE_HEIGHTS[options.lineHeight] || LINE_HEIGHTS.comfortable));
     const pages = [];
     let current;
@@ -132,7 +132,7 @@
 
   function drawPageHeader(ctx, model, options, page, margin, pageNumber) {
     options._pageNumber = pageNumber;
-    const font = options.fontFamily === 'serif' ? SERIF_FONT : SANS_FONT;
+    const font = resolveFontFamily(options.fontFamily);
     if (pageNumber === 1) {
       setFont(ctx, 28, 720, font);
       ctx.fillStyle = '#1d1d1f';
@@ -287,6 +287,13 @@
   function setFont(ctx, size, weight, family) {
     ctx.font = `${weight} ${size}px ${family}`;
     ctx.textBaseline = 'alphabetic';
+  }
+
+  function resolveFontFamily(selection) {
+    if (selection === 'serif') return SERIF_FONT;
+    if (!selection?.startsWith('local:')) return SANS_FONT;
+    const family = String(selection.slice(6)).replace(/[\r\n\f"\\;{}<>]/g, ' ').replace(/\s+/g, ' ').trim();
+    return family ? `"${family}", ${SANS_FONT}` : SANS_FONT;
   }
 
   function roundRect(ctx, x, y, width, height, radius) {

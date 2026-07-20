@@ -233,6 +233,13 @@ h2 { font-size: 22px; }
 .export-control-row { min-height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 14px; color: var(--text-secondary); font-size: 12px; }
 .export-control-row select { width: 170px; height: 34px; padding: 0 30px 0 11px; border: 1px solid rgba(29,29,31,.10); border-radius: 9px; outline: 0; color: var(--text); background: #fafafa; font-size: 12px; }
 .export-control-row select:focus { border-color: rgba(0,113,227,.38); box-shadow: 0 0 0 3px rgba(0,113,227,.08); }
+.export-font-picker { width: 170px; display: grid; grid-template-columns: minmax(0, 1fr) 52px; gap: 5px; }
+.export-font-picker input { min-width: 0; height: 34px; padding: 0 10px; border: 1px solid rgba(29,29,31,.10); border-radius: 9px; outline: 0; color: var(--text); background: #fafafa; font-size: 12px; }
+.export-font-picker input:focus { border-color: rgba(0,113,227,.38); box-shadow: 0 0 0 3px rgba(0,113,227,.08); }
+.export-font-picker button { height: 34px; padding: 0; border: 0; border-radius: 9px; color: var(--accent); background: var(--accent-soft); font-size: 10px; font-weight: 650; }
+.export-font-picker button:hover { background: #dceeff; }
+.export-font-picker button:disabled { color: var(--text-tertiary); background: #f1f1f3; cursor: wait; }
+.export-font-hint { margin: 3px 0 0; color: var(--text-tertiary); font-size: 9.5px; line-height: 1.45; text-align: right; }
 .mini-segmented { width: 170px; height: 34px; padding: 2px; display: grid; grid-template-columns: 1fr 1fr; gap: 2px; border-radius: 9px; background: #f2f2f4; }
 .mini-segmented button { border: 0; border-radius: 7px; color: var(--text-secondary); background: transparent; font-size: 12px; }
 .mini-segmented button.active { color: var(--accent); background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.08); font-weight: 650; }
@@ -281,7 +288,7 @@ h2 { font-size: 22px; }
   .export-dialog { height: calc(100vh - 20px); width: calc(100vw - 20px); }
   .export-workbench-body { grid-template-columns: 310px minmax(0, 1fr); }
   .export-controls { padding-left: 12px; padding-right: 12px; }
-  .export-control-row select, .mini-segmented, .number-stepper { width: 145px; }
+  .export-control-row select, .mini-segmented, .number-stepper, .export-font-picker { width: 145px; }
 }
 
 @media (max-width: 680px) {
