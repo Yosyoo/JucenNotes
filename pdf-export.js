@@ -63,12 +63,12 @@
       let lineIndex = 0;
       let firstChunk = true;
       while (lineIndex < lines.length || (lines.length === 0 && firstChunk)) {
-        const chunkTop = topPadding + (firstChunk ? badgeHeight + headerGap : 0);
+        const continuationHeight = firstChunk ? 0 : 20;
+        const chunkTop = topPadding + (firstChunk ? badgeHeight + headerGap : continuationHeight);
         const reserveMeta = metaHeight + bottomPadding;
         let capacity = Math.floor((contentBottom - y - chunkTop - reserveMeta) / lineHeight);
         if (capacity < 1 && lines.length) {
           addPage();
-          firstChunk = false;
           continue;
         }
 
@@ -410,5 +410,7 @@
     });
   }
 
-  window.JucunPdf = { renderDocument, buildPdf };
+  const api = { renderDocument, buildPdf };
+  globalThis.JucunPdf = api;
+  if (typeof module !== 'undefined') module.exports = api;
 }());

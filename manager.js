@@ -8,6 +8,7 @@ const DEFAULT_CATEGORIES = [
 ];
 
 const CATEGORY_COLORS = ['#5856d6', '#34c759', '#ff9f0a', '#ff375f', '#0071e3', '#00a6a6', '#af52de', '#8e8e93'];
+const NotesCore = globalThis.JucunNotes || (typeof require !== 'undefined' ? require('./notes-store.js') : null);
 
 const state = {
   notes: [],
@@ -15,14 +16,13 @@ const state = {
   activeCategory: 'all',
   search: '',
   selectionMode: false,
-  selectedNotes: new Set()
+  selectedNoteIds: new Set()
 };
 
 const DOM = {};
 let toastTimer;
 let exportPreviewTimer;
-let nextSelectionKey = 1;
-const noteSelectionKeys = new WeakMap();
+let storageRenderPending = false;
 const exportState = { format: 'pdf', zoom: .75, preview: null, localFontsLoaded: false, notes: null, title: '' };
 
 if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded', init);
@@ -31,7 +31,14 @@ async function init() {
   cacheDom();
   renderColorOptions();
   bindEvents();
-  await loadData();
+  bindStorageEvents();
+  try {
+    await loadData();
+  } catch (error) {
+    state.categories = DEFAULT_CATEGORIES.map(category => ({ ...category }));
+    render();
+    showOperationError('加载数据', error);
+  }
 }
 
 function cacheDom() {
@@ -145,8 +152,11 @@ function bindEvents() {
 }
 
 async function loadData() {
-  const result = await storageGet({ notes: [], categories: null });
-  state.notes = Array.isArray(result.notes) ? result.notes : [];
+  const [result, notes] = await Promise.all([
+    storageGet({ categories: null }),
+    requestNoteMutation('get')
+  ]);
+  state.notes = notes;
   state.categories = Array.isArray(result.categories) ? result.categories : DEFAULT_CATEGORIES.map(category => ({ ...category }));
 
   if (!Array.isArray(result.categories)) {
@@ -154,6 +164,28 @@ async function loadData() {
   }
 
   render();
+}
+
+function bindStorageEvents() {
+  if (!globalThis.chrome?.storage?.onChanged) return;
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== 'local') return;
+    let shouldRender = false;
+    if (changes.notes && Array.isArray(changes.notes.newValue)) {
+      state.notes = NotesCore.normalizeNotes(changes.notes.newValue).notes;
+      shouldRender = true;
+    }
+    if (changes.categories && Array.isArray(changes.categories.newValue)) {
+      state.categories = changes.categories.newValue;
+      shouldRender = true;
+    }
+    if (!shouldRender) return;
+    if (document.activeElement?.classList.contains('note-content')) {
+      storageRenderPending = true;
+      return;
+    }
+    render();
+  });
 }
 
 function render() {
@@ -238,10 +270,10 @@ function createNoteCard(note) {
   const category = findCategory(note.categoryId);
   const categoryName = category ? category.name : '未分类';
   const categoryColor = category ? category.color : '#aeaeb2';
-  const selectionKey = getNoteSelectionKey(note);
-  const isSelected = state.selectedNotes.has(note);
+  const noteId = NotesCore.noteIdKey(note.id);
+  const isSelected = state.selectedNoteIds.has(noteId);
   card.className = `note-card${state.selectionMode ? ' selecting' : ''}${isSelected ? ' selected' : ''}`;
-  card.dataset.selectionKey = selectionKey;
+  card.dataset.noteId = noteId;
   card.style.setProperty('--category-color', categoryColor);
 
   const header = document.createElement('div');
@@ -338,7 +370,7 @@ function createNoteCard(note) {
   card.append(header, content, meta);
   card.addEventListener('click', event => {
     if (!state.selectionMode || event.target.closest('a, button, input, label')) return;
-    setNoteSelected(note, !state.selectedNotes.has(note), card);
+    setNoteSelected(note, !state.selectedNoteIds.has(noteId), card);
   });
   return card;
 }
@@ -423,11 +455,16 @@ async function createCategory(event) {
     return;
   }
 
-  state.categories.push({ id: `category-${Date.now()}`, name, color });
-  await storageSet({ categories: state.categories });
-  DOM.categoryDialog.close();
-  render();
-  showToast(`已创建分类“${name}”`);
+  const nextCategories = [...state.categories, { id: `category-${Date.now()}`, name, color }];
+  try {
+    await storageSet({ categories: nextCategories });
+    state.categories = nextCategories;
+    DOM.categoryDialog.close();
+    render();
+    showToast(`已创建分类“${name}”`);
+  } catch (error) {
+    showOperationError('创建分类', error);
+  }
 }
 
 function openManageDialog() {
@@ -481,10 +518,16 @@ function renderManageCategories() {
 async function updateCategory(categoryId, changes) {
   const category = findCategory(categoryId);
   if (!category) return;
-  Object.assign(category, changes);
-  await storageSet({ categories: state.categories });
-  render();
-  renderManageCategories();
+  const nextCategories = state.categories.map(item => item.id === categoryId ? { ...item, ...changes } : item);
+  try {
+    await storageSet({ categories: nextCategories });
+    state.categories = nextCategories;
+    render();
+    renderManageCategories();
+  } catch (error) {
+    showOperationError('更新分类', error);
+    renderManageCategories();
+  }
 }
 
 async function deleteCategory(categoryId) {
@@ -500,13 +543,17 @@ async function deleteCategory(categoryId) {
     confirmLabel: '删除分类'
   });
   if (!confirmed) return;
-  state.categories = state.categories.filter(item => item.id !== categoryId);
-  state.notes = state.notes.map(note => note.categoryId === categoryId ? { ...note, categoryId: null } : note);
-  if (state.activeCategory === categoryId) state.activeCategory = 'uncategorized';
-  await storageSet({ categories: state.categories, notes: state.notes });
-  render();
-  renderManageCategories();
-  showToast('分类已删除，笔记已移至“未分类”');
+  try {
+    const result = await requestCategoryDeletion(categoryId);
+    state.categories = result.categories;
+    state.notes = result.notes;
+    if (state.activeCategory === categoryId) state.activeCategory = 'uncategorized';
+    render();
+    renderManageCategories();
+    showToast('分类已删除，笔记已移至“未分类”');
+  } catch (error) {
+    showOperationError('删除分类', error);
+  }
 }
 
 function openNoteDialog() {
@@ -523,39 +570,65 @@ async function createNote(event) {
   if (!content) return;
   const sourceUrl = DOM.noteSourceInput.value.trim();
   const note = {
-    id: Date.now(),
+    id: NotesCore.createNoteId(),
     content,
     categoryId: DOM.noteCategoryInput.value || null,
     sourceUrl,
     sourceTitle: sourceUrl ? getHostname(sourceUrl) : '',
     timestamp: new Date().toLocaleString('zh-CN', { hour12: false })
   };
-  state.notes.unshift(note);
-  await storageSet({ notes: state.notes });
-  DOM.noteDialog.close();
-  render();
-  showToast('笔记已保存');
+  try {
+    state.notes = await requestNoteMutation('create', { note });
+    DOM.noteDialog.close();
+    render();
+    showToast('笔记已保存');
+  } catch (error) {
+    showOperationError('保存笔记', error);
+  }
 }
 
 async function moveNoteToCategory(noteId, categoryId) {
-  const note = state.notes.find(item => String(item.id) === String(noteId));
+  const note = state.notes.find(item => NotesCore.noteIdKey(item.id) === NotesCore.noteIdKey(noteId));
   if (!note) return;
-  note.categoryId = categoryId || null;
-  await storageSet({ notes: state.notes });
-  render();
-  showToast(`已移至“${findCategory(categoryId)?.name || '未分类'}”`);
+  try {
+    state.notes = await requestNoteMutation('moveCategory', { id: noteId, categoryId });
+    render();
+    showToast(`已移至“${findCategory(categoryId)?.name || '未分类'}”`);
+  } catch (error) {
+    showOperationError('移动笔记', error);
+  }
 }
 
 async function updateNoteContent(noteId, newContent) {
-  const note = state.notes.find(item => String(item.id) === String(noteId));
-  if (!note || note.content === newContent) return;
-  note.content = newContent;
-  await storageSet({ notes: state.notes });
-  showToast('内容已保存');
+  const note = state.notes.find(item => NotesCore.noteIdKey(item.id) === NotesCore.noteIdKey(noteId));
+  if (!note) return;
+  if (note.content === newContent) {
+    flushPendingStorageRender();
+    return;
+  }
+  let saved = false;
+  try {
+    state.notes = await requestNoteMutation('updateContent', { id: noteId, content: newContent });
+    saved = true;
+    showToast('内容已保存');
+  } catch (error) {
+    showOperationError('保存内容', error);
+  } finally {
+    if (!flushPendingStorageRender() && !saved) {
+      renderNotes();
+    }
+  }
+}
+
+function flushPendingStorageRender() {
+  if (!storageRenderPending) return false;
+  storageRenderPending = false;
+  render();
+  return true;
 }
 
 async function deleteNote(noteId) {
-  const note = state.notes.find(item => String(item.id) === String(noteId));
+  const note = state.notes.find(item => NotesCore.noteIdKey(item.id) === NotesCore.noteIdKey(noteId));
   if (!note) return;
   const confirmed = await showConfirm({
     eyebrow: '删除笔记',
@@ -564,10 +637,13 @@ async function deleteNote(noteId) {
     confirmLabel: '删除笔记'
   });
   if (!confirmed) return;
-  state.notes = state.notes.filter(note => String(note.id) !== String(noteId));
-  await storageSet({ notes: state.notes });
-  render();
-  showToast('笔记已删除');
+  try {
+    state.notes = await requestNoteMutation('delete', { ids: [noteId] });
+    render();
+    showToast('笔记已删除');
+  } catch (error) {
+    showOperationError('删除笔记', error);
+  }
 }
 
 function toggleSelectionMode() {
@@ -580,23 +656,18 @@ function toggleSelectionMode() {
 
 function setSelectionMode(enabled) {
   state.selectionMode = Boolean(enabled);
-  state.selectedNotes.clear();
+  state.selectedNoteIds.clear();
   closeCategoryMenus();
   renderNotes();
   if (!state.selectionMode) DOM.batchSelectBtn.focus();
 }
 
-function getNoteSelectionKey(note) {
-  if (!noteSelectionKeys.has(note)) noteSelectionKeys.set(note, `note-${nextSelectionKey++}`);
-  return noteSelectionKeys.get(note);
-}
-
 function setNoteSelected(note, selected, card = null) {
-  if (selected) state.selectedNotes.add(note);
-  else state.selectedNotes.delete(note);
+  const noteId = NotesCore.noteIdKey(note.id);
+  if (selected) state.selectedNoteIds.add(noteId);
+  else state.selectedNoteIds.delete(noteId);
 
-  const selectionKey = getNoteSelectionKey(note);
-  const targetCard = card || [...DOM.listEl.querySelectorAll('.note-card')].find(item => item.dataset.selectionKey === selectionKey);
+  const targetCard = card || [...DOM.listEl.querySelectorAll('.note-card')].find(item => item.dataset.noteId === noteId);
   targetCard?.classList.toggle('selected', selected);
   const checkbox = targetCard?.querySelector('.note-select input');
   if (checkbox) checkbox.checked = selected;
@@ -606,14 +677,14 @@ function setNoteSelected(note, selected, card = null) {
 function toggleSelectAllVisible() {
   const visibleNotes = getVisibleNotes();
   if (!visibleNotes.length) return;
-  const allSelected = visibleNotes.every(note => state.selectedNotes.has(note));
+  const allSelected = visibleNotes.every(note => state.selectedNoteIds.has(NotesCore.noteIdKey(note.id)));
   visibleNotes.forEach(note => {
-    if (allSelected) state.selectedNotes.delete(note);
-    else state.selectedNotes.add(note);
+    const noteId = NotesCore.noteIdKey(note.id);
+    if (allSelected) state.selectedNoteIds.delete(noteId);
+    else state.selectedNoteIds.add(noteId);
   });
-  const visibleNotesByKey = new Map(visibleNotes.map(note => [getNoteSelectionKey(note), note]));
   DOM.listEl.querySelectorAll('.note-card').forEach(card => {
-    const selected = state.selectedNotes.has(visibleNotesByKey.get(card.dataset.selectionKey));
+    const selected = state.selectedNoteIds.has(card.dataset.noteId);
     card.classList.toggle('selected', selected);
     const checkbox = card.querySelector('.note-select input');
     if (checkbox) checkbox.checked = selected;
@@ -622,44 +693,45 @@ function toggleSelectAllVisible() {
 }
 
 function getSelectedNotes() {
-  return filterSelectedNotes(state.notes, state.selectedNotes);
+  return filterSelectedNotes(state.notes, state.selectedNoteIds);
 }
 
-function filterSelectedNotes(notes, selectedNotes) {
-  if (!(selectedNotes instanceof Set)) return [];
-  return notes.filter(note => selectedNotes.has(note));
+function filterSelectedNotes(notes, selectedNoteIds) {
+  if (!(selectedNoteIds instanceof Set)) return [];
+  return notes.filter(note => selectedNoteIds.has(NotesCore.noteIdKey(note.id)));
 }
 
-function reconcileVisibleSelection(selectedNotes, visibleSelections) {
-  const reconciled = new Set(selectedNotes);
+function reconcileVisibleSelection(selectedNoteIds, visibleSelections) {
+  const reconciled = new Set(selectedNoteIds);
   visibleSelections.forEach(({ note, checked }) => {
-    if (checked) reconciled.add(note);
-    else reconciled.delete(note);
+    const noteId = NotesCore.noteIdKey(note.id);
+    if (checked) reconciled.add(noteId);
+    else reconciled.delete(noteId);
   });
   return reconciled;
 }
 
 function syncVisibleSelectionFromDom() {
-  const visibleNotesByKey = new Map(getVisibleNotes().map(note => [getNoteSelectionKey(note), note]));
+  const visibleNotesById = new Map(getVisibleNotes().map(note => [NotesCore.noteIdKey(note.id), note]));
   const visibleSelections = [...DOM.listEl.querySelectorAll('.note-card')].map(card => ({
-    note: visibleNotesByKey.get(card.dataset.selectionKey),
+    note: visibleNotesById.get(card.dataset.noteId),
     checked: card.querySelector('.note-select input')?.checked === true
   })).filter(item => item.note);
-  state.selectedNotes = reconcileVisibleSelection(state.selectedNotes, visibleSelections);
+  state.selectedNoteIds = reconcileVisibleSelection(state.selectedNoteIds, visibleSelections);
   updateBatchControls();
 }
 
 function pruneSelectedNotes() {
-  const existingNotes = new Set(state.notes);
-  [...state.selectedNotes].forEach(note => {
-    if (!existingNotes.has(note)) state.selectedNotes.delete(note);
+  const existingNoteIds = new Set(state.notes.map(note => NotesCore.noteIdKey(note.id)));
+  [...state.selectedNoteIds].forEach(noteId => {
+    if (!existingNoteIds.has(noteId)) state.selectedNoteIds.delete(noteId);
   });
 }
 
 function updateBatchControls(visibleNotes = getVisibleNotes()) {
-  const selectedCount = state.selectedNotes.size;
+  const selectedCount = state.selectedNoteIds.size;
   const allVisibleSelected = visibleNotes.length > 0
-    && visibleNotes.every(note => state.selectedNotes.has(note));
+    && visibleNotes.every(note => state.selectedNoteIds.has(NotesCore.noteIdKey(note.id)));
   DOM.batchActions.hidden = !state.selectionMode;
   DOM.batchSelectedCount.textContent = `已选择 ${selectedCount} 条`;
   DOM.batchSelectAll.textContent = allVisibleSelected ? '取消全选' : '全选当前视图';
@@ -681,13 +753,16 @@ async function deleteSelectedNotes() {
     confirmLabel: '删除所选'
   });
   if (!confirmed) return;
-  const selectedNoteSet = new Set(selectedNotes);
-  state.notes = state.notes.filter(note => !selectedNoteSet.has(note));
-  state.selectionMode = false;
-  state.selectedNotes.clear();
-  await storageSet({ notes: state.notes });
-  render();
-  showToast(`已删除 ${selectedNotes.length} 条笔记`);
+  try {
+    state.notes = await requestNoteMutation('delete', { ids: selectedNotes.map(note => note.id) });
+    state.selectionMode = false;
+    state.selectedNoteIds.clear();
+    render();
+    DOM.batchSelectBtn.focus();
+    showToast(`已删除 ${selectedNotes.length} 条笔记`);
+  } catch (error) {
+    showOperationError('批量删除', error);
+  }
 }
 
 function handleShortcuts(event) {
@@ -1044,6 +1119,11 @@ function showToast(message) {
   toastTimer = setTimeout(() => DOM.toast.classList.remove('show'), 1800);
 }
 
+function showOperationError(action, error) {
+  console.error(`${action}失败`, error);
+  showToast(`${action}失败，请重试`);
+}
+
 function showConfirm({ eyebrow = '操作确认', title, message, confirmLabel = '确认' }) {
   if (DOM.confirmDialog.open) return Promise.resolve(false);
 
@@ -1090,6 +1170,54 @@ function escapeHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+async function requestNoteMutation(action, payload = {}) {
+  if (globalThis.chrome?.runtime?.sendMessage) {
+    const response = await chrome.runtime.sendMessage({
+      type: 'JUCUN_MUTATE_NOTES',
+      action,
+      payload
+    });
+    if (!response?.ok || !Array.isArray(response.notes)) {
+      throw new Error(response?.error || '后台未返回有效的笔记数据');
+    }
+    return NotesCore.normalizeNotes(response.notes).notes;
+  }
+
+  const result = await storageGet({ notes: [] });
+  const normalized = NotesCore.normalizeNotes(result.notes);
+  const notes = action === 'get'
+    ? normalized.notes
+    : NotesCore.applyNoteMutation(normalized.notes, action, payload);
+  if (action !== 'get' || normalized.changed) await storageSet({ notes });
+  return notes;
+}
+
+async function requestCategoryDeletion(categoryId) {
+  if (globalThis.chrome?.runtime?.sendMessage) {
+    const response = await chrome.runtime.sendMessage({
+      type: 'JUCUN_DELETE_CATEGORY',
+      categoryId
+    });
+    if (!response?.ok || !Array.isArray(response.notes) || !Array.isArray(response.categories)) {
+      throw new Error(response?.error || '后台未返回有效的分类数据');
+    }
+    return {
+      notes: NotesCore.normalizeNotes(response.notes).notes,
+      categories: response.categories
+    };
+  }
+
+  const result = await storageGet({ notes: [], categories: [] });
+  const notes = NotesCore.applyNoteMutation(result.notes, 'reassignCategory', {
+    categoryId,
+    replacementCategoryId: null
+  });
+  const categories = (Array.isArray(result.categories) ? result.categories : [])
+    .filter(category => category.id !== categoryId);
+  await storageSet({ notes, categories });
+  return { notes, categories };
 }
 
 function storageGet(defaults) {

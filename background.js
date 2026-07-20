@@ -1,3 +1,6 @@
+if (typeof importScripts === 'function') importScripts('notes-store.js');
+const NotesCore = globalThis.JucunNotes || (typeof require !== 'undefined' ? require('./notes-store.js') : null);
+
 // 初始化：安装后创建右键菜单
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -55,7 +58,7 @@ async function saveSelectedText(info, tab) {
   if (!content) return;
 
   const note = {
-    id: Date.now(), // 唯一ID
+    id: NotesCore.createNoteId(),
     content,
     categoryId: null, // 新笔记默认进入“未分类”
     sourceUrl: info.pageUrl || tab?.url || '',
@@ -63,11 +66,46 @@ async function saveSelectedText(info, tab) {
     timestamp: new Date().toLocaleString('zh-CN', { hour12: false })
   };
 
-  const result = await chrome.storage.local.get({ notes: [] });
-  const notes = Array.isArray(result.notes) ? result.notes : [];
-  notes.unshift(note); // 新笔记插在最前面
-  await chrome.storage.local.set({ notes });
+  await queueNoteMutation('create', { note });
   console.log('笔记已保存');
+}
+
+let noteMutationQueue = Promise.resolve();
+
+function enqueueStorageMutation(operation) {
+  const task = noteMutationQueue.catch(() => {}).then(operation);
+  noteMutationQueue = task;
+  return task;
+}
+
+function mutateStoredNotes(action, payload = {}) {
+  return enqueueStorageMutation(async () => {
+    const result = await chrome.storage.local.get({ notes: [] });
+    const normalized = NotesCore.normalizeNotes(result.notes);
+    const notes = action === 'get'
+      ? normalized.notes
+      : NotesCore.applyNoteMutation(normalized.notes, action, payload);
+    if (action !== 'get' || normalized.changed) await chrome.storage.local.set({ notes });
+    return notes;
+  });
+}
+
+function queueNoteMutation(action, payload = {}) {
+  return mutateStoredNotes(action, payload);
+}
+
+function deleteStoredCategory(categoryId) {
+  return enqueueStorageMutation(async () => {
+    const result = await chrome.storage.local.get({ notes: [], categories: [] });
+    const categories = (Array.isArray(result.categories) ? result.categories : [])
+      .filter(category => category.id !== categoryId);
+    const notes = NotesCore.applyNoteMutation(result.notes, 'reassignCategory', {
+      categoryId,
+      replacementCategoryId: null
+    });
+    await chrome.storage.local.set({ notes, categories });
+    return { notes, categories };
+  });
 }
 
 // 处理右键点击事件
@@ -76,6 +114,30 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   saveSelectedText(info, tab).catch(error => console.error('保存笔记失败', error));
 });
 
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!['JUCUN_MUTATE_NOTES', 'JUCUN_DELETE_CATEGORY'].includes(message?.type)) return;
+  const operation = message.type === 'JUCUN_DELETE_CATEGORY'
+    ? deleteStoredCategory(message.categoryId)
+    : queueNoteMutation(message.action, message.payload);
+  operation.then(
+    result => sendResponse(message.type === 'JUCUN_DELETE_CATEGORY'
+      ? { ok: true, ...result }
+      : { ok: true, notes: result }),
+    error => {
+      console.error('笔记写入失败', error);
+      sendResponse({ ok: false, error: error?.message || '笔记写入失败' });
+    }
+  );
+  return true;
+});
+
 if (typeof module !== 'undefined') {
-  module.exports = { normalizeSelectionText, chooseBestSelectionText, getSelectedText, saveSelectedText };
+  module.exports = {
+    normalizeSelectionText,
+    chooseBestSelectionText,
+    getSelectedText,
+    saveSelectedText,
+    queueNoteMutation,
+    deleteStoredCategory
+  };
 }

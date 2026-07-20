@@ -1,10 +1,14 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-function loadBackground({ sendMessage, notes = [] } = {}) {
+function loadBackground({ sendMessage, notes = [], categories = [] } = {}) {
   const writes = [];
+  const stored = { notes: [...notes], categories: [...categories] };
   global.chrome = {
-    runtime: { onInstalled: { addListener() {} } },
+    runtime: {
+      onInstalled: { addListener() {} },
+      onMessage: { addListener() {} }
+    },
     contextMenus: {
       create() {},
       onClicked: { addListener() {} }
@@ -16,15 +20,18 @@ function loadBackground({ sendMessage, notes = [] } = {}) {
     },
     storage: {
       local: {
-        async get() { return { notes: [...notes] }; },
-        async set(value) { writes.push(value); }
+        async get(defaults = {}) { return { ...defaults, ...stored, notes: [...stored.notes] }; },
+        async set(value) {
+          Object.assign(stored, value);
+          writes.push(value);
+        }
       }
     }
   };
 
   const modulePath = require.resolve('../background.js');
   delete require.cache[modulePath];
-  return { background: require(modulePath), writes };
+  return { background: require(modulePath), writes, stored };
 }
 
 test('normalizeSelectionText unifies browser newline characters', () => {
@@ -100,4 +107,39 @@ test('chooseBestSelectionText never replaces a richer browser result with flatte
     background.chooseBestSelectionText('第一段第二段', '第一段\n第二段'),
     '第一段\n第二段'
   );
+});
+
+test('concurrent captures are serialized without losing either note', async () => {
+  const { background, stored } = loadBackground({
+    notes: [{ id: 'old', content: '旧笔记' }],
+    sendMessage: async () => null
+  });
+
+  await Promise.all([
+    background.saveSelectedText(
+      { selectionText: '并发笔记一', pageUrl: 'https://example.com/one' },
+      { id: 1, title: '一' }
+    ),
+    background.saveSelectedText(
+      { selectionText: '并发笔记二', pageUrl: 'https://example.com/two' },
+      { id: 2, title: '二' }
+    )
+  ]);
+
+  assert.equal(stored.notes.length, 3);
+  assert.deepEqual(new Set(stored.notes.map(note => note.content)), new Set(['旧笔记', '并发笔记一', '并发笔记二']));
+});
+
+test('category deletion updates categories and affected notes in one storage write', async () => {
+  const { background, stored, writes } = loadBackground({
+    notes: [{ id: 'one', content: '笔记', categoryId: 'work' }],
+    categories: [{ id: 'work', name: '工作' }, { id: 'life', name: '生活' }]
+  });
+
+  const result = await background.deleteStoredCategory('work');
+
+  assert.deepEqual(result.categories, [{ id: 'life', name: '生活' }]);
+  assert.equal(result.notes[0].categoryId, null);
+  assert.equal(writes.length, 1);
+  assert.deepEqual(stored, result);
 });
