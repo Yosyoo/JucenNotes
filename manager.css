@@ -308,6 +308,230 @@ body {
   cursor: pointer;
 }
 
+.export-option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.export-option:disabled:hover {
+  background: none;
+}
+
+.export-scope {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.export-scope-btn {
+  width: 100%;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: rgba(0, 113, 227, 0.05);
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  padding: 9px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.export-scope-btn:hover {
+  background: rgba(0, 113, 227, 0.1);
+}
+
+.export-selection-summary {
+  color: var(--accent-color);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+body.modal-open {
+  overflow: hidden;
+}
+
+.modal-overlay[hidden] {
+  display: none;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.32);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.selection-modal {
+  width: min(620px, 100%);
+  max-height: min(720px, calc(100vh - 48px));
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 18px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+}
+
+.selection-modal-header,
+.selection-modal-toolbar,
+.selection-modal-footer {
+  display: flex;
+  align-items: center;
+}
+
+.selection-modal-header {
+  justify-content: space-between;
+  padding: 20px 22px 14px;
+}
+
+.selection-modal-header h3 {
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+
+.selection-modal-header p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.modal-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: #f2f2f7;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.selection-modal-toolbar {
+  gap: 8px;
+  padding: 0 22px 12px;
+}
+
+.btn-secondary {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: white;
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 11px;
+}
+
+.btn-secondary:hover {
+  background: #f5f5f7;
+}
+
+.btn-secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.export-note-options {
+  min-height: 120px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.export-note-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 22px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.export-note-option + .export-note-option {
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.export-note-option:hover {
+  background: rgba(0, 113, 227, 0.06);
+}
+
+.export-note-option input {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  margin: 2px 0 0;
+  accent-color: var(--accent-color);
+}
+
+.export-note-details {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.export-note-preview,
+.export-note-source {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.export-note-preview {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.export-note-source {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.export-selection-empty {
+  margin: 0;
+  padding: 48px 22px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.selection-modal-footer {
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 22px 18px;
+}
+
+.selection-modal-footer .btn-primary {
+  justify-content: center;
+}
+
+@media (max-width: 600px) {
+  .modal-overlay {
+    padding: 12px;
+    align-items: flex-end;
+  }
+
+  .selection-modal {
+    max-height: calc(100vh - 24px);
+    border-radius: 18px 18px 10px 10px;
+  }
+
+  .export-note-option {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
 /* === 主内容区 === */
 .container {
   max-width: 900px;
@@ -536,6 +760,7 @@ body {
   .list-header button,
   .search-wrapper,
   .search-status,
+  .modal-overlay,
   .delete-btn {
     display: none !important;
   }
@@ -678,6 +903,7 @@ body {
 .printing-mode .list-header button,
 .printing-mode .search-wrapper,
 .printing-mode .search-status,
+.printing-mode .modal-overlay,
 .printing-mode .export-menu {
   display: none !important;
 }

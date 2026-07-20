@@ -10,6 +10,16 @@ const DOM = {
   clearBtn: document.getElementById('clear-all'),         // 清空全部按钮
   exportBtn: document.getElementById('export-btn'),       // 导出按钮
   exportMenu: document.getElementById('export-menu'),     // 导出菜单
+  chooseExportNotes: document.getElementById('choose-export-notes'),
+  exportSelectionSummary: document.getElementById('export-selection-summary'),
+  exportSelectionModal: document.getElementById('export-selection-modal'),
+  exportSelectionCount: document.getElementById('export-selection-count'),
+  exportNoteOptions: document.getElementById('export-note-options'),
+  exportSelectionClose: document.getElementById('export-selection-close'),
+  exportSelectAll: document.getElementById('export-select-all'),
+  exportSelectNone: document.getElementById('export-select-none'),
+  exportSelectionCancel: document.getElementById('export-selection-cancel'),
+  exportSelectionApply: document.getElementById('export-selection-apply'),
   searchInput: document.getElementById('search-input'),   // 搜索输入框
   searchClear: document.getElementById('search-clear'),   // 清除搜索按钮
   searchStatus: document.getElementById('search-status')  // 搜索结果提示
@@ -17,6 +27,9 @@ const DOM = {
 
 let allNotes = [];
 let searchQuery = '';
+let selectedExportNoteIds = new Set();
+let pendingExportNoteIds = new Set();
+let hasCustomExportSelection = false;
 
 // ==================== 页面初始化 ====================
 document.addEventListener('DOMContentLoaded', init);
@@ -46,6 +59,30 @@ function bindEvents() {
     option.addEventListener('click', handleExport);
   });
 
+  DOM.chooseExportNotes.addEventListener('click', (event) => {
+    event.stopPropagation();
+    openExportSelectionModal();
+  });
+  DOM.exportSelectionClose.addEventListener('click', closeExportSelectionModal);
+  DOM.exportSelectionCancel.addEventListener('click', closeExportSelectionModal);
+  DOM.exportSelectionApply.addEventListener('click', applyExportSelection);
+  DOM.exportSelectAll.addEventListener('click', () => {
+    pendingExportNoteIds = new Set(allNotes.map(note => note.id));
+    renderExportNoteOptions();
+  });
+  DOM.exportSelectNone.addEventListener('click', () => {
+    pendingExportNoteIds.clear();
+    renderExportNoteOptions();
+  });
+  DOM.exportSelectionModal.addEventListener('click', (event) => {
+    if (event.target === DOM.exportSelectionModal) closeExportSelectionModal();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !DOM.exportSelectionModal.hidden) {
+      closeExportSelectionModal();
+    }
+  });
+
   // 点击菜单外部关闭菜单
   document.addEventListener('click', closeExportMenuOnClickOutside);
 
@@ -70,6 +107,7 @@ function loadNotes() {
   chrome.storage.local.get({ notes: [] }, (result) => {
     allNotes = result.notes;
     renderFilteredNotes();
+    syncExportSelection();
   });
 }
 
@@ -279,24 +317,143 @@ function closeExportMenuOnClickOutside(e) {
   }
 }
 
+function syncExportSelection() {
+  const availableIds = new Set(allNotes.map(note => note.id));
+
+  if (!hasCustomExportSelection) {
+    selectedExportNoteIds = new Set(availableIds);
+  } else {
+    selectedExportNoteIds = new Set(
+      [...selectedExportNoteIds].filter(id => availableIds.has(id))
+    );
+  }
+
+  updateExportSelectionSummary();
+}
+
+function getSelectedExportNotes() {
+  return NoteUtils.selectNotes(allNotes, selectedExportNoteIds);
+}
+
+function updateExportSelectionSummary() {
+  const selectedCount = getSelectedExportNotes().length;
+  const totalCount = allNotes.length;
+
+  DOM.exportSelectionSummary.textContent = selectedCount === totalCount
+    ? `全部 ${totalCount} 条`
+    : `已选 ${selectedCount}/${totalCount} 条`;
+
+  document.querySelectorAll('.export-option').forEach(option => {
+    option.disabled = selectedCount === 0;
+  });
+}
+
+function openExportSelectionModal() {
+  pendingExportNoteIds = new Set(selectedExportNoteIds);
+  renderExportNoteOptions();
+  DOM.exportMenu.classList.remove('show');
+  DOM.exportSelectionModal.hidden = false;
+  document.body.classList.add('modal-open');
+  DOM.exportSelectionClose.focus();
+}
+
+function closeExportSelectionModal() {
+  if (DOM.exportSelectionModal.hidden) return;
+  DOM.exportSelectionModal.hidden = true;
+  document.body.classList.remove('modal-open');
+  DOM.exportBtn.focus();
+}
+
+function applyExportSelection() {
+  selectedExportNoteIds = new Set(pendingExportNoteIds);
+  hasCustomExportSelection = true;
+  updateExportSelectionSummary();
+  closeExportSelectionModal();
+}
+
+function renderExportNoteOptions() {
+  DOM.exportNoteOptions.innerHTML = '';
+
+  if (allNotes.length === 0) {
+    const emptyState = document.createElement('p');
+    emptyState.className = 'export-selection-empty';
+    emptyState.textContent = '还没有可导出的笔记';
+    DOM.exportNoteOptions.appendChild(emptyState);
+    updatePendingExportSelectionCount();
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  allNotes.forEach(note => {
+    const option = document.createElement('label');
+    option.className = 'export-note-option';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = pendingExportNoteIds.has(note.id);
+    checkbox.setAttribute('aria-label', '选择此笔记');
+    checkbox.addEventListener('change', () => {
+      if (checkbox.checked) {
+        pendingExportNoteIds.add(note.id);
+      } else {
+        pendingExportNoteIds.delete(note.id);
+      }
+      updatePendingExportSelectionCount();
+    });
+
+    const details = document.createElement('span');
+    details.className = 'export-note-details';
+
+    const preview = document.createElement('strong');
+    preview.className = 'export-note-preview';
+    const normalizedContent = String(note.content || '').replace(/\s+/g, ' ').trim();
+    preview.textContent = normalizedContent || '（空白笔记）';
+
+    const source = document.createElement('small');
+    source.className = 'export-note-source';
+    source.textContent = note.sourceTitle || note.sourceUrl || '未知网页';
+
+    details.append(preview, source);
+    option.append(checkbox, details);
+    fragment.appendChild(option);
+  });
+
+  DOM.exportNoteOptions.appendChild(fragment);
+  updatePendingExportSelectionCount();
+}
+
+function updatePendingExportSelectionCount() {
+  const selectedCount = pendingExportNoteIds.size;
+  DOM.exportSelectionCount.textContent = `已选 ${selectedCount} / ${allNotes.length} 条`;
+  DOM.exportSelectAll.disabled = allNotes.length === 0 || selectedCount === allNotes.length;
+  DOM.exportSelectNone.disabled = selectedCount === 0;
+}
+
 /**
  * 处理导出选项的点击事件
  * @param {Event} e - 点击事件
  */
 function handleExport(e) {
   const format = e.currentTarget.dataset.format;
+  const selectedNotes = getSelectedExportNotes();
+
+  if (selectedNotes.length === 0) {
+    alert('请先选择至少一条要导出的笔记');
+    return;
+  }
+
   DOM.exportMenu.classList.remove('show');
 
   // 根据选择的格式调用对应的导出函数
   switch (format) {
     case 'txt':
-      exportAsTxt();
+      exportAsTxt(selectedNotes);
       break;
     case 'word':
-      exportAsWord();
+      exportAsWord(selectedNotes);
       break;
     case 'pdf':
-      exportAsPdf();
+      exportAsPdf(selectedNotes);
       break;
   }
 }
@@ -317,12 +474,11 @@ function getOptions() {
 /**
  * 导出为纯文本格式 (TXT)
  */
-function exportAsTxt() {
-  chrome.storage.local.get({ notes: [] }, (result) => {
+function exportAsTxt(notes) {
     const opts = getOptions();
     let text = "";
 
-    result.notes.forEach(note => {
+    notes.forEach(note => {
       text += note.content + "\n";
       if (opts.time) text += `时间: ${note.timestamp}\n`;
       if (opts.source) {
@@ -333,16 +489,14 @@ function exportAsTxt() {
     });
 
     downloadFile(new Blob([text], { type: "text/plain;charset=utf-8" }), "my-notes.txt");
-  });
 }
 
 /**
  * 导出为 Microsoft Word 格式 (DOCX)
  */
-function exportAsWord() {
+function exportAsWord(notes) {
   const opts = getOptions();
 
-  chrome.storage.local.get({ notes: [] }, (result) => {
     let html = `<!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
@@ -414,10 +568,10 @@ function exportAsWord() {
 <body>`;
 
     // 添加文档标题
-    html += `<h1>全部笔记</h1>`;
+    html += `<h1>导出笔记（${notes.length} 条）</h1>`;
 
     // 循环添加每条笔记
-    result.notes.forEach(note => {
+    notes.forEach(note => {
       html += `<div class="note-item">`;
       html += `<div class="note-title">${NoteUtils.textToHtmlWithLineBreaks(note.content)}</div>`;
 
@@ -440,36 +594,35 @@ function exportAsWord() {
     // 创建 Blob 并下载（使用标准 Office Open XML MIME 类型）
     const blob = new Blob([html], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
     downloadFile(blob, "my-notes.docx");
-  });
 }
 
 /**
  * 导出为 PDF 格式
  * 使用浏览器的打印功能生成 PDF
  */
-function exportAsPdf() {
+function exportAsPdf(notes) {
   const opts = getOptions();
-  document.body.classList.add('printing-mode');
+  const listTitle = document.querySelector('.list-header h2');
+  const previousListTitle = listTitle.textContent;
+  listTitle.textContent = `导出笔记（${notes.length} 条）`;
 
-  // 当用户选择不包含来源时，通过添加类强制隐藏（覆盖 CSS 中的 !important）
+  // PDF 依赖当前页面打印，先临时渲染用户选中的笔记。
+  renderNotes(notes);
+  document.body.classList.add('printing-mode');
   if (!opts.source) document.body.classList.add('hide-source');
 
-  // 获取需要控制显示的元素（仍保留用于屏幕即时预览回退）
   const timeDoms = document.querySelectorAll('.meta-time');
   const sourceDoms = document.querySelectorAll('.meta-source');
-
-  // 根据用户选择显示或隐藏元数据（用于屏幕预览）
   timeDoms.forEach(el => el.style.display = opts.time ? '' : 'none');
   sourceDoms.forEach(el => el.style.display = opts.source ? '' : 'none');
 
-  // 打开打印对话框
-  window.print();
-
-  // 恢复页面状态
-  document.body.classList.remove('printing-mode');
-  if (!opts.source) document.body.classList.remove('hide-source');
-  timeDoms.forEach(el => el.style.display = '');
-  sourceDoms.forEach(el => el.style.display = '');
+  try {
+    window.print();
+  } finally {
+    document.body.classList.remove('printing-mode', 'hide-source');
+    listTitle.textContent = previousListTitle;
+    renderFilteredNotes();
+  }
 }
 
 /**
