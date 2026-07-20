@@ -13,15 +13,19 @@ const state = {
   notes: [],
   categories: [],
   activeCategory: 'all',
-  search: ''
+  search: '',
+  selectionMode: false,
+  selectedNotes: new Set()
 };
 
 const DOM = {};
 let toastTimer;
 let exportPreviewTimer;
-const exportState = { format: 'pdf', zoom: .75, preview: null, localFontsLoaded: false };
+let nextSelectionKey = 1;
+const noteSelectionKeys = new WeakMap();
+const exportState = { format: 'pdf', zoom: .75, preview: null, localFontsLoaded: false, notes: null, title: '' };
 
-document.addEventListener('DOMContentLoaded', init);
+if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
   cacheDom();
@@ -38,7 +42,12 @@ function cacheDom() {
     viewTitle: document.getElementById('view-title'),
     viewSubtitle: document.getElementById('view-subtitle'),
     searchInput: document.getElementById('search-input'),
-    clearBtn: document.getElementById('clear-all'),
+    batchSelectBtn: document.getElementById('batch-select-btn'),
+    batchActions: document.getElementById('batch-actions'),
+    batchSelectedCount: document.getElementById('batch-selected-count'),
+    batchSelectAll: document.getElementById('batch-select-all'),
+    batchExport: document.getElementById('batch-export'),
+    batchDelete: document.getElementById('batch-delete'),
     exportBtn: document.getElementById('export-btn'),
     exportDialog: document.getElementById('export-dialog'),
     exportDialogClose: document.getElementById('export-dialog-close'),
@@ -78,8 +87,11 @@ function cacheDom() {
 }
 
 function bindEvents() {
-  DOM.clearBtn.addEventListener('click', clearVisibleNotes);
-  DOM.exportBtn.addEventListener('click', openExportDialog);
+  DOM.batchSelectBtn.addEventListener('click', toggleSelectionMode);
+  DOM.batchSelectAll.addEventListener('click', toggleSelectAllVisible);
+  DOM.batchExport.addEventListener('click', openSelectedExportDialog);
+  DOM.batchDelete.addEventListener('click', deleteSelectedNotes);
+  DOM.exportBtn.addEventListener('click', () => openExportDialog());
   document.addEventListener('keydown', handleShortcuts);
   document.addEventListener('click', closeCategoryMenus);
 
@@ -204,7 +216,9 @@ function renderPills() {
 
 function renderNotes() {
   const visibleNotes = getVisibleNotes();
+  pruneSelectedNotes();
   updatePageHeading(visibleNotes.length);
+  updateBatchControls(visibleNotes);
   DOM.listEl.replaceChildren();
 
   if (!visibleNotes.length) {
@@ -224,28 +238,39 @@ function createNoteCard(note) {
   const category = findCategory(note.categoryId);
   const categoryName = category ? category.name : '未分类';
   const categoryColor = category ? category.color : '#aeaeb2';
-  card.className = 'note-card';
+  const selectionKey = getNoteSelectionKey(note);
+  const isSelected = state.selectedNotes.has(note);
+  card.className = `note-card${state.selectionMode ? ' selecting' : ''}${isSelected ? ' selected' : ''}`;
+  card.dataset.selectionKey = selectionKey;
   card.style.setProperty('--category-color', categoryColor);
 
   const header = document.createElement('div');
   header.className = 'card-header';
-  header.innerHTML = `<span class="category-badge"><span class="category-dot"></span>${escapeHtml(categoryName)}</span>
+  header.innerHTML = `<div class="card-header-main">
+      ${state.selectionMode ? `<label class="note-select" title="选择笔记"><input type="checkbox" aria-label="选择这条笔记" ${isSelected ? 'checked' : ''}></label>` : ''}
+      <span class="category-badge"><span class="category-dot"></span>${escapeHtml(categoryName)}</span>
+    </div>
     <button class="delete-btn" type="button" title="删除笔记" aria-label="删除笔记">×</button>`;
   header.querySelector('.delete-btn').addEventListener('click', () => deleteNote(note.id));
+  header.querySelector('.note-select input')?.addEventListener('input', event => {
+    setNoteSelected(note, event.target.checked, card);
+  });
 
   const content = document.createElement('div');
   content.className = 'note-content';
-  content.contentEditable = 'true';
-  content.title = '点击即可编辑内容';
+  content.contentEditable = String(!state.selectionMode);
+  content.title = state.selectionMode ? '点击卡片选择笔记' : '点击即可编辑内容';
   content.textContent = note.content || '';
-  content.addEventListener('focus', () => card.classList.add('editing'));
-  content.addEventListener('blur', () => {
-    card.classList.remove('editing');
-    updateNoteContent(note.id, content.innerText.trim());
-  });
-  content.addEventListener('keydown', event => {
-    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') content.blur();
-  });
+  if (!state.selectionMode) {
+    content.addEventListener('focus', () => card.classList.add('editing'));
+    content.addEventListener('blur', () => {
+      card.classList.remove('editing');
+      updateNoteContent(note.id, content.innerText.trim());
+    });
+    content.addEventListener('keydown', event => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') content.blur();
+    });
+  }
 
   const meta = document.createElement('div');
   meta.className = 'note-meta';
@@ -311,6 +336,10 @@ function createNoteCard(note) {
   meta.appendChild(picker);
 
   card.append(header, content, meta);
+  card.addEventListener('click', event => {
+    if (!state.selectionMode || event.target.closest('a, button, input, label')) return;
+    setNoteSelected(note, !state.selectedNotes.has(note), card);
+  });
   return card;
 }
 
@@ -541,22 +570,124 @@ async function deleteNote(noteId) {
   showToast('笔记已删除');
 }
 
-async function clearVisibleNotes() {
+function toggleSelectionMode() {
+  if (!state.selectionMode && !getVisibleNotes().length) {
+    showToast('当前视图没有可选择的笔记');
+    return;
+  }
+  setSelectionMode(!state.selectionMode);
+}
+
+function setSelectionMode(enabled) {
+  state.selectionMode = Boolean(enabled);
+  state.selectedNotes.clear();
+  closeCategoryMenus();
+  renderNotes();
+  if (!state.selectionMode) DOM.batchSelectBtn.focus();
+}
+
+function getNoteSelectionKey(note) {
+  if (!noteSelectionKeys.has(note)) noteSelectionKeys.set(note, `note-${nextSelectionKey++}`);
+  return noteSelectionKeys.get(note);
+}
+
+function setNoteSelected(note, selected, card = null) {
+  if (selected) state.selectedNotes.add(note);
+  else state.selectedNotes.delete(note);
+
+  const selectionKey = getNoteSelectionKey(note);
+  const targetCard = card || [...DOM.listEl.querySelectorAll('.note-card')].find(item => item.dataset.selectionKey === selectionKey);
+  targetCard?.classList.toggle('selected', selected);
+  const checkbox = targetCard?.querySelector('.note-select input');
+  if (checkbox) checkbox.checked = selected;
+  updateBatchControls();
+}
+
+function toggleSelectAllVisible() {
   const visibleNotes = getVisibleNotes();
   if (!visibleNotes.length) return;
-  const scope = state.activeCategory === 'all' && !state.search ? '所有笔记' : `当前视图中的 ${visibleNotes.length} 条笔记`;
+  const allSelected = visibleNotes.every(note => state.selectedNotes.has(note));
+  visibleNotes.forEach(note => {
+    if (allSelected) state.selectedNotes.delete(note);
+    else state.selectedNotes.add(note);
+  });
+  const visibleNotesByKey = new Map(visibleNotes.map(note => [getNoteSelectionKey(note), note]));
+  DOM.listEl.querySelectorAll('.note-card').forEach(card => {
+    const selected = state.selectedNotes.has(visibleNotesByKey.get(card.dataset.selectionKey));
+    card.classList.toggle('selected', selected);
+    const checkbox = card.querySelector('.note-select input');
+    if (checkbox) checkbox.checked = selected;
+  });
+  updateBatchControls(visibleNotes);
+}
+
+function getSelectedNotes() {
+  return filterSelectedNotes(state.notes, state.selectedNotes);
+}
+
+function filterSelectedNotes(notes, selectedNotes) {
+  if (!(selectedNotes instanceof Set)) return [];
+  return notes.filter(note => selectedNotes.has(note));
+}
+
+function reconcileVisibleSelection(selectedNotes, visibleSelections) {
+  const reconciled = new Set(selectedNotes);
+  visibleSelections.forEach(({ note, checked }) => {
+    if (checked) reconciled.add(note);
+    else reconciled.delete(note);
+  });
+  return reconciled;
+}
+
+function syncVisibleSelectionFromDom() {
+  const visibleNotesByKey = new Map(getVisibleNotes().map(note => [getNoteSelectionKey(note), note]));
+  const visibleSelections = [...DOM.listEl.querySelectorAll('.note-card')].map(card => ({
+    note: visibleNotesByKey.get(card.dataset.selectionKey),
+    checked: card.querySelector('.note-select input')?.checked === true
+  })).filter(item => item.note);
+  state.selectedNotes = reconcileVisibleSelection(state.selectedNotes, visibleSelections);
+  updateBatchControls();
+}
+
+function pruneSelectedNotes() {
+  const existingNotes = new Set(state.notes);
+  [...state.selectedNotes].forEach(note => {
+    if (!existingNotes.has(note)) state.selectedNotes.delete(note);
+  });
+}
+
+function updateBatchControls(visibleNotes = getVisibleNotes()) {
+  const selectedCount = state.selectedNotes.size;
+  const allVisibleSelected = visibleNotes.length > 0
+    && visibleNotes.every(note => state.selectedNotes.has(note));
+  DOM.batchActions.hidden = !state.selectionMode;
+  DOM.batchSelectedCount.textContent = `已选择 ${selectedCount} 条`;
+  DOM.batchSelectAll.textContent = allVisibleSelected ? '取消全选' : '全选当前视图';
+  DOM.batchSelectAll.disabled = !visibleNotes.length;
+  DOM.batchExport.disabled = selectedCount === 0;
+  DOM.batchDelete.disabled = selectedCount === 0;
+  DOM.batchSelectBtn.classList.toggle('active', state.selectionMode);
+  DOM.batchSelectBtn.setAttribute('aria-pressed', String(state.selectionMode));
+  DOM.batchSelectBtn.querySelector('span').textContent = state.selectionMode ? '完成' : '批量选择';
+}
+
+async function deleteSelectedNotes() {
+  const selectedNotes = getSelectedNotes();
+  if (!selectedNotes.length) return;
   const confirmed = await showConfirm({
     eyebrow: '批量删除',
-    title: `清空${scope}？`,
-    message: `即将永久删除 ${visibleNotes.length} 条笔记，此操作无法撤销。`,
-    confirmLabel: '确认清空'
+    title: `删除所选的 ${selectedNotes.length} 条笔记？`,
+    message: '所选笔记删除后无法恢复，请确认是否继续。',
+    confirmLabel: '删除所选'
   });
   if (!confirmed) return;
-  const visibleIds = new Set(visibleNotes.map(note => String(note.id)));
-  state.notes = state.notes.filter(note => !visibleIds.has(String(note.id)));
+  const selectedNoteSet = new Set(selectedNotes);
+  state.notes = state.notes.filter(note => !selectedNoteSet.has(note));
+  state.selectionMode = false;
+  state.selectedNotes.clear();
   await storageSet({ notes: state.notes });
   render();
-  showToast('已完成清空');
+  showToast(`已删除 ${selectedNotes.length} 条笔记`);
 }
 
 function handleShortcuts(event) {
@@ -565,6 +696,10 @@ function handleShortcuts(event) {
     DOM.searchInput.focus();
   }
   if (event.key === 'Escape') {
+    if (state.selectionMode && !document.querySelector('dialog[open]')) {
+      setSelectionMode(false);
+      return;
+    }
     const openPicker = document.querySelector('.category-picker.open');
     closeCategoryMenus();
     openPicker?.querySelector('.category-picker-trigger')?.focus();
@@ -579,11 +714,20 @@ function closeCategoryMenus() {
   });
 }
 
-function openExportDialog() {
-  if (!getVisibleNotes().length) {
+function openSelectedExportDialog() {
+  syncVisibleSelectionFromDom();
+  const selectedNotes = getSelectedNotes();
+  if (!selectedNotes.length) return;
+  openExportDialog(selectedNotes, '所选笔记');
+}
+
+function openExportDialog(notes = getVisibleNotes(), title = DOM.viewTitle.textContent || '句存笔记') {
+  if (!notes.length) {
     showToast('当前视图没有可导出的笔记');
     return;
   }
+  exportState.notes = createExportSnapshot(notes);
+  exportState.title = title;
   setExportFormat('pdf');
   DOM.exportDialog.showModal();
   scheduleExportPreview();
@@ -592,6 +736,8 @@ function openExportDialog() {
 function closeExportDialog() {
   clearTimeout(exportPreviewTimer);
   if (DOM.exportDialog.open) DOM.exportDialog.close();
+  exportState.notes = null;
+  exportState.title = '';
 }
 
 function setExportFormat(format) {
@@ -732,8 +878,8 @@ function applyPreviewZoom() {
 
 function getExportModel() {
   return {
-    title: DOM.viewTitle.textContent || '句存笔记',
-    notes: getVisibleNotes().map(note => {
+    title: exportState.title || DOM.viewTitle.textContent || '句存笔记',
+    notes: getNotesForExport().map(note => {
       const category = findCategory(note.categoryId);
       return {
         content: note.content || '',
@@ -744,6 +890,14 @@ function getExportModel() {
       };
     })
   };
+}
+
+function getNotesForExport() {
+  return Array.isArray(exportState.notes) ? exportState.notes : getVisibleNotes();
+}
+
+function createExportSnapshot(notes) {
+  return notes.map(note => ({ ...note }));
 }
 
 async function confirmExport() {
@@ -766,7 +920,7 @@ async function confirmExport() {
 
 function exportAsTxt() {
   const options = getExportOptions();
-  const text = getVisibleNotes().map(note => {
+  const text = getNotesForExport().map(note => {
     const lines = [note.content || ''];
     if (options.category) lines.push(`分类：${findCategory(note.categoryId)?.name || '未分类'}`);
     if (options.time) lines.push(`时间：${note.timestamp || ''}`);
@@ -868,9 +1022,10 @@ function sanitizeLocalFontName(value) {
 }
 
 async function exportAsPdf() {
-  const rendered = window.JucunPdf.renderDocument(getExportModel(), getExportOptions(), 1.5);
+  const model = getExportModel();
+  const rendered = window.JucunPdf.renderDocument(model, getExportOptions(), 1.5);
   const blob = await window.JucunPdf.buildPdf(rendered.canvases, rendered.page, rendered.links);
-  downloadFile(blob, `${DOM.viewTitle.textContent || '句存笔记'}.pdf`);
+  downloadFile(blob, `${model.title}.pdf`);
 }
 
 function downloadFile(blob, filename) {
@@ -958,3 +1113,5 @@ function storageSet(values) {
     });
   });
 }
+
+if (typeof module !== 'undefined') module.exports = { filterSelectedNotes, reconcileVisibleSelection, createExportSnapshot };

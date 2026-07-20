@@ -75,6 +75,7 @@ button { cursor: pointer; }
 }
 .button svg { width: 15px; height: 15px; }
 .button:hover { transform: translateY(-1px); }
+.button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
 .button.primary { color: #fff; background: var(--accent); box-shadow: 0 4px 10px rgba(0, 113, 227, .22); }
 .button.primary:hover { background: var(--accent-hover); }
 .button.danger { color: #fff; background: var(--danger); box-shadow: 0 4px 12px rgba(255, 59, 48, .22); }
@@ -83,6 +84,7 @@ button { cursor: pointer; }
 .button.light { border: 1px solid var(--border); background: rgba(255, 255, 255, .76); }
 .button.danger-ghost { color: var(--text-secondary); background: transparent; }
 .button.danger-ghost:hover { color: var(--danger); background: rgba(255, 59, 48, .08); }
+.batch-toggle.active { color: var(--accent); border-color: rgba(0,113,227,.18); background: var(--accent-soft); }
 
 .app-shell {
   width: min(1180px, calc(100% - 40px));
@@ -124,6 +126,20 @@ h1 { font-size: 30px; line-height: 1.2; }
 h2 { font-size: 22px; }
 .subtitle { margin: 7px 0 0; color: var(--text-secondary); font-size: 13px; }
 
+.batch-actions {
+  min-height: 58px; margin-bottom: 16px; padding: 9px 10px 9px 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  border: 1px solid rgba(0,113,227,.14); border-radius: 14px; background: rgba(234,244,255,.72); box-shadow: 0 1px 3px rgba(0,113,227,.04);
+}
+.batch-actions[hidden] { display: none; }
+.batch-selection-summary, .batch-action-buttons { display: flex; align-items: center; gap: 9px; }
+.batch-selection-summary { color: #145f9f; font-size: 12px; }
+.batch-selection-icon { width: 23px; height: 23px; display: grid; place-items: center; border-radius: 7px; color: #fff; background: var(--accent); font-size: 13px; font-weight: 750; }
+.batch-action-buttons { gap: 8px; }
+.batch-action-buttons .button { min-height: 36px; padding: 0 12px; font-size: 12px; }
+.batch-action-link { height: 34px; padding: 0 8px; border: 0; color: var(--accent); background: transparent; font-size: 12px; font-weight: 620; }
+.batch-action-link:hover { text-decoration: underline; }
+.batch-action-link:disabled { color: var(--text-tertiary); cursor: not-allowed; text-decoration: none; }
+
 .filterbar {
   min-height: 50px; margin-bottom: 16px; padding: 8px; display: flex; align-items: center; gap: 10px;
   border-radius: 14px; border: 1px solid rgba(255,255,255,.78); background: rgba(255,255,255,.58); box-shadow: 0 1px 2px rgba(0,0,0,.025); backdrop-filter: blur(12px);
@@ -147,14 +163,22 @@ h2 { font-size: 22px; }
 .note-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; border-radius: 16px 0 0 16px; background: var(--category-color); }
 .note-card:hover { transform: translateY(-2px); background: rgba(255,255,255,.82); box-shadow: 0 8px 25px rgba(0,0,0,.075); }
 .card-header { min-height: 28px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.card-header-main { min-width: 0; display: flex; align-items: center; gap: 10px; }
+.note-select { width: 22px; height: 22px; flex: none; display: grid; place-items: center; cursor: pointer; }
+.note-select input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); cursor: pointer; }
 .category-badge { height: 26px; padding: 0 9px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px; color: var(--category-color); background: color-mix(in srgb, var(--category-color) 11%, white); font-size: 11px; font-weight: 650; }
 .category-badge .category-dot { width: 7px; height: 7px; background: var(--category-color); box-shadow: none; }
 .delete-btn { width: 28px; height: 28px; border: 0; border-radius: 50%; display: grid; place-items: center; color: #8e8e93; background: #f2f2f7; opacity: 0; font-size: 16px; line-height: 1; transition: opacity .18s, color .18s, background .18s; }
 .note-card:hover .delete-btn, .delete-btn:focus-visible { opacity: 1; }
 .delete-btn:hover { color: var(--danger); background: rgba(255,59,48,.09); }
-.note-content { padding: 7px 0; border-radius: 8px; outline: 0; color: #303033; font-size: 15px; line-height: 1.72; white-space: pre-wrap; transition: padding .18s, background .18s, box-shadow .18s; }
-.note-content:hover { padding-left: 8px; padding-right: 8px; background: rgba(0,0,0,.018); }
-.note-content:focus { padding-left: 8px; padding-right: 8px; background: rgba(0,113,227,.045); box-shadow: inset 0 0 0 1px rgba(0,113,227,.10); }
+.note-content { padding: 7px 0; border-radius: 8px; outline: 0; color: #303033; font-size: 15px; line-height: 1.72; white-space: pre-wrap; transition: transform .18s, background .18s, box-shadow .18s; }
+.note-content:hover { transform: translateX(8px); background: rgba(0,0,0,.018); }
+.note-content:focus { transform: translateX(8px); background: rgba(0,113,227,.045); box-shadow: inset 0 0 0 1px rgba(0,113,227,.10); }
+.note-card.selecting { cursor: pointer; }
+.note-card.selecting.selected { border-color: rgba(0,113,227,.34); background: rgba(244,250,255,.94); box-shadow: 0 0 0 2px rgba(0,113,227,.10), var(--shadow-sm); }
+.note-card.selecting .note-content { cursor: pointer; }
+.note-card.selecting .note-content:hover { transform: none; background: transparent; }
+.note-card.selecting .delete-btn, .note-card.selecting .category-picker { display: none; }
 .note-card.editing .delete-btn { visibility: hidden; }
 .note-meta { margin-top: 13px; padding-top: 13px; border-top: 1px solid rgba(29,29,31,.07); display: flex; align-items: center; gap: 9px; color: var(--text-tertiary); font-size: 11px; }
 .meta-source { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -441,6 +465,8 @@ h2 { font-size: 22px; }
   .sidebar-divider { display: none; }
   .page-header { align-items: flex-start; }
   .page-actions { flex-direction: row; }
+  .batch-actions { align-items: flex-start; flex-direction: column; }
+  .batch-action-buttons { width: 100%; flex-wrap: wrap; }
   #manage-categories-top { display: none; }
   .note-meta { flex-wrap: wrap; }
   .category-picker { margin-left: 0; width: fit-content; }

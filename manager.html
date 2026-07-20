@@ -69,9 +69,30 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"></path></svg>
             管理分类
           </button>
-          <button id="clear-all" class="button danger-ghost" type="button">清空</button>
+          <button id="batch-select-btn" class="button light batch-toggle" type="button" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><path d="m15 18 2 2 4-5"></path></svg>
+            <span>批量选择</span>
+          </button>
         </div>
       </header>
+
+      <div id="batch-actions" class="batch-actions" hidden>
+        <div class="batch-selection-summary">
+          <span class="batch-selection-icon" aria-hidden="true">✓</span>
+          <strong id="batch-selected-count">已选择 0 条</strong>
+        </div>
+        <div class="batch-action-buttons">
+          <button id="batch-select-all" class="batch-action-link" type="button">全选当前视图</button>
+          <button id="batch-export" class="button secondary" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0 4-4m-4 4-4-4"></path><path d="M5 16v3h14v-3"></path></svg>
+            导出所选
+          </button>
+          <button id="batch-delete" class="button danger" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 3h6l1 4H8l1-4Zm-2 4 .8 13h8.4L17 7"></path></svg>
+            删除所选
+          </button>
+        </div>
+      </div>
 
       <div class="filterbar">
         <div id="category-pills" class="filter-pills"></div>
