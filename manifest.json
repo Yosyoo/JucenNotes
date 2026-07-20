@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "句存 - 网页轻笔记",
-  "version": "1.1.0",
-  "description": "右键收藏网页文字，支持分类、搜索及导出 PDF/Word/TXT。",
+  "version": "1.2.0",
+  "description": "右键收藏网页文字，支持分类、搜索及自定义排版导出 PDF/Word/TXT。",
   "permissions": [
     "contextMenus",
     "storage"

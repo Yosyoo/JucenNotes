@@ -19,6 +19,8 @@ const state = {
 
 const DOM = {};
 let toastTimer;
+let exportPreviewTimer;
+const exportState = { format: 'pdf', zoom: .75, preview: null };
 
 document.addEventListener('DOMContentLoaded', init);
 
@@ -39,7 +41,19 @@ function cacheDom() {
     searchInput: document.getElementById('search-input'),
     clearBtn: document.getElementById('clear-all'),
     exportBtn: document.getElementById('export-btn'),
-    exportMenu: document.getElementById('export-menu'),
+    exportDialog: document.getElementById('export-dialog'),
+    exportDialogClose: document.getElementById('export-dialog-close'),
+    exportCancel: document.getElementById('export-cancel'),
+    exportConfirm: document.getElementById('export-confirm'),
+    exportSummary: document.getElementById('export-summary'),
+    exportPreviewCanvas: document.getElementById('export-preview-canvas'),
+    exportNextPage: document.getElementById('export-next-page'),
+    exportPaperSize: document.getElementById('export-paper-size'),
+    exportMargin: document.getElementById('export-margin'),
+    exportFontFamily: document.getElementById('export-font-family'),
+    exportFontSize: document.getElementById('export-font-size'),
+    exportLineHeight: document.getElementById('export-line-height'),
+    previewZoomValue: document.getElementById('preview-zoom-value'),
     addCategoryBtn: document.getElementById('add-category-btn'),
     categoryDialog: document.getElementById('category-dialog'),
     categoryForm: document.getElementById('category-form'),
@@ -59,10 +73,24 @@ function cacheDom() {
 
 function bindEvents() {
   DOM.clearBtn.addEventListener('click', clearVisibleNotes);
-  DOM.exportBtn.addEventListener('click', toggleExportMenu);
-  document.querySelectorAll('.export-option').forEach(option => option.addEventListener('click', handleExport));
-  document.addEventListener('click', closeFloatingMenus);
+  DOM.exportBtn.addEventListener('click', openExportDialog);
   document.addEventListener('keydown', handleShortcuts);
+
+  DOM.exportDialogClose.addEventListener('click', closeExportDialog);
+  DOM.exportCancel.addEventListener('click', closeExportDialog);
+  DOM.exportConfirm.addEventListener('click', confirmExport);
+  DOM.exportDialog.addEventListener('click', event => {
+    if (event.target === DOM.exportDialog) closeExportDialog();
+  });
+  document.querySelectorAll('[data-export-format]').forEach(button => button.addEventListener('click', () => setExportFormat(button.dataset.exportFormat)));
+  document.querySelectorAll('[data-export-option]').forEach(button => button.addEventListener('click', () => selectExportOption(button)));
+  [DOM.exportPaperSize, DOM.exportMargin, DOM.exportFontFamily, DOM.exportLineHeight].forEach(control => control.addEventListener('change', scheduleExportPreview));
+  ['export-include-category', 'export-include-time', 'export-include-source', 'export-include-page-number'].forEach(id => document.getElementById(id).addEventListener('change', scheduleExportPreview));
+  document.getElementById('export-font-decrease').addEventListener('click', () => changeExportFontSize(-1));
+  document.getElementById('export-font-increase').addEventListener('click', () => changeExportFontSize(1));
+  document.getElementById('export-reset').addEventListener('click', resetExportSettings);
+  document.getElementById('preview-zoom-out').addEventListener('click', () => changePreviewZoom(-.1));
+  document.getElementById('preview-zoom-in').addEventListener('click', () => changePreviewZoom(.1));
 
   DOM.searchInput.addEventListener('input', event => {
     state.search = event.target.value.trim().toLocaleLowerCase('zh-CN');
@@ -223,7 +251,7 @@ function createNoteCard(note) {
   if (note.sourceUrl || note.sourceTitle) {
     meta.appendChild(separatorDot());
     const source = document.createElement('span');
-    source.className = 'meta-source screen-only';
+    source.className = 'meta-source';
     source.append('来自：');
     const link = document.createElement('a');
     link.href = safeUrl(note.sourceUrl);
@@ -233,10 +261,6 @@ function createNoteCard(note) {
     source.appendChild(link);
     meta.appendChild(source);
 
-    const printSource = document.createElement('span');
-    printSource.className = 'meta-source print-only';
-    printSource.textContent = `来源：${note.sourceTitle || note.sourceUrl || '未知来源'}`;
-    meta.appendChild(printSource);
   }
 
   const picker = document.createElement('label');
@@ -484,36 +508,142 @@ function handleShortcuts(event) {
     event.preventDefault();
     DOM.searchInput.focus();
   }
-  if (event.key === 'Escape') DOM.exportMenu.classList.remove('show');
 }
 
-function toggleExportMenu(event) {
-  event.stopPropagation();
-  const isOpen = DOM.exportMenu.classList.toggle('show');
-  DOM.exportBtn.setAttribute('aria-expanded', String(isOpen));
-}
-
-function closeFloatingMenus(event) {
-  if (!event.target.closest('.export-menu-wrapper')) {
-    DOM.exportMenu.classList.remove('show');
-    DOM.exportBtn.setAttribute('aria-expanded', 'false');
+function openExportDialog() {
+  if (!getVisibleNotes().length) {
+    showToast('当前视图没有可导出的笔记');
+    return;
   }
+  setExportFormat('pdf');
+  DOM.exportDialog.showModal();
+  scheduleExportPreview();
 }
 
-function handleExport(event) {
-  DOM.exportMenu.classList.remove('show');
-  const format = event.currentTarget.dataset.format;
-  if (format === 'txt') exportAsTxt();
-  if (format === 'word') exportAsWord();
-  if (format === 'pdf') exportAsPdf();
+function closeExportDialog() {
+  clearTimeout(exportPreviewTimer);
+  if (DOM.exportDialog.open) DOM.exportDialog.close();
+}
+
+function setExportFormat(format) {
+  exportState.format = format;
+  document.querySelectorAll('[data-export-format]').forEach(button => {
+    const active = button.dataset.exportFormat === format;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+  });
+  const labels = { pdf: '导出 PDF', word: '导出 Word', txt: '导出 TXT' };
+  DOM.exportConfirm.querySelector('span').textContent = labels[format];
 }
 
 function getExportOptions() {
   return {
     category: document.getElementById('export-include-category').checked,
     time: document.getElementById('export-include-time').checked,
-    source: document.getElementById('export-include-source').checked
+    source: document.getElementById('export-include-source').checked,
+    pageNumber: document.getElementById('export-include-page-number').checked,
+    paperSize: DOM.exportPaperSize.value,
+    orientation: document.querySelector('[data-export-option="orientation"].active')?.dataset.value || 'portrait',
+    margin: DOM.exportMargin.value,
+    template: document.querySelector('[data-export-option="template"].active')?.dataset.value || 'minimal',
+    fontFamily: DOM.exportFontFamily.value,
+    fontSize: Number(DOM.exportFontSize.value) || 14,
+    lineHeight: DOM.exportLineHeight.value
   };
+}
+
+function selectExportOption(button) {
+  const option = button.dataset.exportOption;
+  document.querySelectorAll(`[data-export-option="${option}"]`).forEach(item => item.classList.toggle('active', item === button));
+  scheduleExportPreview();
+}
+
+function changeExportFontSize(delta) {
+  DOM.exportFontSize.value = Math.min(18, Math.max(11, Number(DOM.exportFontSize.value) + delta));
+  scheduleExportPreview();
+}
+
+function resetExportSettings() {
+  DOM.exportPaperSize.value = 'a4';
+  DOM.exportMargin.value = 'standard';
+  DOM.exportFontFamily.value = 'sans';
+  DOM.exportFontSize.value = 14;
+  DOM.exportLineHeight.value = 'comfortable';
+  document.querySelectorAll('[data-export-option="orientation"]').forEach(button => button.classList.toggle('active', button.dataset.value === 'portrait'));
+  document.querySelectorAll('[data-export-option="template"]').forEach(button => button.classList.toggle('active', button.dataset.value === 'minimal'));
+  ['export-include-category', 'export-include-time', 'export-include-source', 'export-include-page-number'].forEach(id => { document.getElementById(id).checked = true; });
+  exportState.zoom = .75;
+  scheduleExportPreview();
+}
+
+function changePreviewZoom(delta) {
+  exportState.zoom = Math.min(1.15, Math.max(.45, Math.round((exportState.zoom + delta) * 100) / 100));
+  applyPreviewZoom();
+}
+
+function scheduleExportPreview() {
+  clearTimeout(exportPreviewTimer);
+  exportPreviewTimer = setTimeout(updateExportPreview, 80);
+}
+
+function updateExportPreview() {
+  if (!DOM.exportDialog.open) return;
+  const model = getExportModel();
+  const rendered = window.JucunPdf.renderDocument(model, getExportOptions(), 1);
+  exportState.preview = rendered;
+  const firstPage = rendered.canvases[0];
+  DOM.exportPreviewCanvas.width = firstPage.width;
+  DOM.exportPreviewCanvas.height = firstPage.height;
+  DOM.exportPreviewCanvas.getContext('2d').drawImage(firstPage, 0, 0);
+  DOM.exportNextPage.hidden = rendered.canvases.length < 2;
+  DOM.exportSummary.textContent = `将导出 ${model.notes.length} 条笔记 · 预计 ${rendered.canvases.length} 页`;
+  applyPreviewZoom();
+}
+
+function applyPreviewZoom() {
+  if (!exportState.preview) return;
+  const { width, height } = exportState.preview.page;
+  const displayWidth = Math.round(width * exportState.zoom);
+  const displayHeight = Math.round(height * exportState.zoom);
+  DOM.exportPreviewCanvas.style.width = `${displayWidth}px`;
+  DOM.exportPreviewCanvas.style.height = `${displayHeight}px`;
+  DOM.exportNextPage.style.width = `${displayWidth}px`;
+  DOM.exportNextPage.style.height = `${displayHeight}px`;
+  DOM.previewZoomValue.value = `${Math.round(exportState.zoom * 100)}%`;
+}
+
+function getExportModel() {
+  return {
+    title: DOM.viewTitle.textContent || '句存笔记',
+    notes: getVisibleNotes().map(note => {
+      const category = findCategory(note.categoryId);
+      return {
+        content: note.content || '',
+        timestamp: note.timestamp || '',
+        sourceTitle: note.sourceTitle || '',
+        sourceUrl: note.sourceUrl || '',
+        category: category ? { name: category.name, color: category.color } : { name: '未分类', color: '#8e8e93' }
+      };
+    })
+  };
+}
+
+async function confirmExport() {
+  DOM.exportConfirm.classList.add('busy');
+  DOM.exportConfirm.disabled = true;
+  try {
+    if (exportState.format === 'txt') exportAsTxt();
+    else if (exportState.format === 'word') exportAsWord();
+    else await exportAsPdf();
+    closeExportDialog();
+    showToast('导出完成');
+  } catch (error) {
+    console.error(error);
+    showToast('导出失败，请重试');
+  } finally {
+    DOM.exportConfirm.classList.remove('busy');
+    DOM.exportConfirm.disabled = false;
+  }
 }
 
 function exportAsTxt() {
@@ -541,14 +671,10 @@ function exportAsWord() {
   downloadFile(new Blob([html], { type: 'application/msword;charset=utf-8' }), '句存笔记.doc');
 }
 
-function exportAsPdf() {
-  const options = getExportOptions();
-  document.body.classList.add('printing-mode');
-  document.body.classList.toggle('hide-category', !options.category);
-  document.body.classList.toggle('hide-time', !options.time);
-  document.body.classList.toggle('hide-source', !options.source);
-  window.print();
-  document.body.classList.remove('printing-mode', 'hide-category', 'hide-time', 'hide-source');
+async function exportAsPdf() {
+  const rendered = window.JucunPdf.renderDocument(getExportModel(), getExportOptions(), 1.5);
+  const blob = await window.JucunPdf.buildPdf(rendered.canvases, rendered.page);
+  downloadFile(blob, `${DOM.viewTitle.textContent || '句存笔记'}.pdf`);
 }
 
 function downloadFile(blob, filename) {
@@ -591,10 +717,19 @@ function escapeHtml(value) {
 }
 
 function storageGet(defaults) {
+  if (!globalThis.chrome?.storage?.local) {
+    const stored = JSON.parse(localStorage.getItem('jucun-preview-data') || '{}');
+    return Promise.resolve({ ...defaults, ...stored });
+  }
   return new Promise(resolve => chrome.storage.local.get(defaults, resolve));
 }
 
 function storageSet(values) {
+  if (!globalThis.chrome?.storage?.local) {
+    const stored = JSON.parse(localStorage.getItem('jucun-preview-data') || '{}');
+    localStorage.setItem('jucun-preview-data', JSON.stringify({ ...stored, ...values }));
+    return Promise.resolve();
+  }
   return new Promise((resolve, reject) => {
     chrome.storage.local.set(values, () => {
       if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
