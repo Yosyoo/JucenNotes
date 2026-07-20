@@ -1,452 +1,604 @@
-/*
- * 句存 - 轻笔记管理脚本
- * 负责笔记的加载、编辑、删除、导出等功能
- */
+/* 句存 - 笔记与分类管理 */
 
-// ==================== DOM 缓存 ====================
-// 缓存常用的 DOM 元素，避免重复查询
-const DOM = {
-  listEl: document.getElementById('note-list'),           // 笔记列表容器
-  clearBtn: document.getElementById('clear-all'),         // 清空全部按钮
-  exportBtn: document.getElementById('export-btn'),       // 导出按钮
-  exportMenu: document.getElementById('export-menu')      // 导出菜单
+const DEFAULT_CATEGORIES = [
+  { id: 'work', name: '工作', color: '#5856d6' },
+  { id: 'study', name: '学习', color: '#34c759' },
+  { id: 'idea', name: '灵感', color: '#ff9f0a' },
+  { id: 'life', name: '生活', color: '#ff375f' }
+];
+
+const CATEGORY_COLORS = ['#5856d6', '#34c759', '#ff9f0a', '#ff375f', '#0071e3', '#00a6a6', '#af52de', '#8e8e93'];
+
+const state = {
+  notes: [],
+  categories: [],
+  activeCategory: 'all',
+  search: '',
+  recentOnly: false
 };
 
-// ==================== 页面初始化 ====================
+const DOM = {};
+let toastTimer;
+
 document.addEventListener('DOMContentLoaded', init);
 
-/**
- * 初始化函数
- * 页面加载完成后执行
- */
-function init() {
-  loadNotes();
+async function init() {
+  cacheDom();
+  renderColorOptions();
   bindEvents();
+  await loadData();
 }
 
-/**
- * 绑定所有事件监听器
- */
+function cacheDom() {
+  Object.assign(DOM, {
+    listEl: document.getElementById('note-list'),
+    categoryList: document.getElementById('category-list'),
+    categoryPills: document.getElementById('category-pills'),
+    viewTitle: document.getElementById('view-title'),
+    viewSubtitle: document.getElementById('view-subtitle'),
+    searchInput: document.getElementById('search-input'),
+    clearBtn: document.getElementById('clear-all'),
+    exportBtn: document.getElementById('export-btn'),
+    exportMenu: document.getElementById('export-menu'),
+    addCategoryBtn: document.getElementById('add-category-btn'),
+    categoryDialog: document.getElementById('category-dialog'),
+    categoryForm: document.getElementById('category-form'),
+    categoryName: document.getElementById('category-name'),
+    categoryError: document.getElementById('category-error'),
+    manageDialog: document.getElementById('manage-dialog'),
+    manageList: document.getElementById('manage-category-list'),
+    noteDialog: document.getElementById('note-dialog'),
+    noteForm: document.getElementById('note-form'),
+    noteContentInput: document.getElementById('note-content-input'),
+    noteCategoryInput: document.getElementById('note-category-input'),
+    noteSourceInput: document.getElementById('note-source-input'),
+    recentFilter: document.getElementById('recent-filter'),
+    toast: document.getElementById('toast')
+  });
+}
+
 function bindEvents() {
-  // 清空按钮事件
-  DOM.clearBtn.addEventListener('click', clearAllNotes);
-
-  // 导出按钮事件
+  DOM.clearBtn.addEventListener('click', clearVisibleNotes);
   DOM.exportBtn.addEventListener('click', toggleExportMenu);
+  document.querySelectorAll('.export-option').forEach(option => option.addEventListener('click', handleExport));
+  document.addEventListener('click', closeFloatingMenus);
+  document.addEventListener('keydown', handleShortcuts);
 
-  // 导出选项事件
-  const exportOptions = document.querySelectorAll('.export-option');
-  exportOptions.forEach(option => {
-    option.addEventListener('click', handleExport);
+  DOM.searchInput.addEventListener('input', event => {
+    state.search = event.target.value.trim().toLocaleLowerCase('zh-CN');
+    render();
   });
 
-  // 点击菜单外部关闭菜单
-  document.addEventListener('click', closeExportMenuOnClickOutside);
-}
+  DOM.addCategoryBtn.addEventListener('click', openCategoryDialog);
+  DOM.categoryForm.addEventListener('submit', createCategory);
+  DOM.noteForm.addEventListener('submit', createNote);
+  document.getElementById('new-note-btn').addEventListener('click', openNoteDialog);
+  document.getElementById('manage-categories-btn').addEventListener('click', openManageDialog);
+  document.getElementById('manage-categories-top').addEventListener('click', openManageDialog);
+  document.getElementById('manage-add-category').addEventListener('click', () => {
+    DOM.manageDialog.close();
+    openCategoryDialog();
+  });
 
-// ==================== 笔记管理 ====================
+  DOM.recentFilter.addEventListener('click', () => {
+    state.recentOnly = !state.recentOnly;
+    state.activeCategory = 'all';
+    DOM.recentFilter.classList.toggle('selected', state.recentOnly);
+    render();
+  });
 
-/**
- * 从存储中加载笔记
- */
-function loadNotes() {
-  chrome.storage.local.get({ notes: [] }, (result) => {
-    renderNotes(result.notes);
+  document.querySelectorAll('[data-close-dialog]').forEach(button => {
+    button.addEventListener('click', () => document.getElementById(button.dataset.closeDialog).close());
+  });
+
+  document.querySelectorAll('.modal').forEach(dialog => {
+    dialog.addEventListener('click', event => {
+      if (event.target === dialog) dialog.close();
+    });
   });
 }
 
-/**
- * 渲染笔记列表到页面
- * @param {Array} notes - 笔记数组
- */
-function renderNotes(notes) {
-  DOM.listEl.innerHTML = '';
+async function loadData() {
+  const result = await storageGet({ notes: [], categories: null });
+  state.notes = Array.isArray(result.notes) ? result.notes : [];
+  state.categories = Array.isArray(result.categories) ? result.categories : DEFAULT_CATEGORIES.map(category => ({ ...category }));
 
-  // 如果没有笔记，显示空状态提示
-  if (notes.length === 0) {
-    DOM.listEl.innerHTML = `
-      <div style="text-align:center; padding: 60px 0; color:#86868B;">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#D1D1D6" stroke-width="1">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-          <polyline points="14 2 14 8 20 8"></polyline>
-          <line x1="16" y1="13" x2="8" y2="13"></line>
-          <line x1="16" y1="17" x2="8" y2="17"></line>
-          <polyline points="10 9 9 9 8 9"></polyline>
-        </svg>
-        <p>- 浮生暂寄梦中梦 -</p>
-      </div>`;
+  if (!Array.isArray(result.categories)) {
+    await storageSet({ categories: state.categories });
+  }
+
+  render();
+}
+
+function render() {
+  renderCategories();
+  renderPills();
+  renderNotes();
+  populateCategorySelect(DOM.noteCategoryInput, DOM.noteCategoryInput.value || '');
+}
+
+function renderCategories() {
+  const items = [
+    categoryButton('all', '全部笔记', state.notes.length, null, true),
+    ...state.categories.map(category => categoryButton(category.id, category.name, countForCategory(category.id), category.color)),
+    categoryButton('uncategorized', '未分类', countForCategory(null), '#aeaeb2')
+  ];
+  DOM.categoryList.replaceChildren(...items);
+}
+
+function categoryButton(id, label, count, color, isAll = false) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `category-item${!state.recentOnly && state.activeCategory === id ? ' selected' : ''}`;
+  button.dataset.categoryId = id;
+
+  if (isAll) {
+    button.innerHTML = '<svg class="category-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>';
+  } else {
+    const dot = document.createElement('span');
+    dot.className = 'category-dot';
+    dot.style.background = color;
+    button.appendChild(dot);
+  }
+
+  button.append(document.createTextNode(label));
+  const countEl = document.createElement('span');
+  countEl.className = 'category-count';
+  countEl.textContent = count;
+  button.appendChild(countEl);
+  button.addEventListener('click', () => selectCategory(id));
+  return button;
+}
+
+function renderPills() {
+  const categories = [{ id: 'all', name: '全部' }, ...state.categories];
+  const fragment = document.createDocumentFragment();
+  categories.forEach(category => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `filter-pill${!state.recentOnly && state.activeCategory === category.id ? ' active' : ''}`;
+    const count = category.id === 'all' ? state.notes.length : countForCategory(category.id);
+    button.append(document.createTextNode(category.name));
+    const number = document.createElement('b');
+    number.textContent = count;
+    button.appendChild(number);
+    button.addEventListener('click', () => selectCategory(category.id));
+    fragment.appendChild(button);
+  });
+  DOM.categoryPills.replaceChildren(fragment);
+}
+
+function renderNotes() {
+  const visibleNotes = getVisibleNotes();
+  updatePageHeading(visibleNotes.length);
+  DOM.listEl.replaceChildren();
+
+  if (!visibleNotes.length) {
+    DOM.listEl.innerHTML = `<div class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6M8 13h8M8 17h5"></path></svg>
+      <h3>${state.search ? '没有找到匹配的笔记' : '这里还没有笔记'}</h3>
+      <p>${state.search ? '换个关键词，或选择其他分类试试。' : '通过右键保存网页文字，或点击右上角新建笔记。'}</p>
+    </div>`;
     return;
   }
 
-  // 创建并添加每条笔记的卡片
-  notes.forEach((note) => {
-    DOM.listEl.appendChild(createNoteCard(note));
-  });
-
-  // 为新创建的笔记卡片绑定交互事件
-  bindNoteEvents();
+  visibleNotes.forEach(note => DOM.listEl.appendChild(createNoteCard(note)));
 }
 
-/**
- * 创建单条笔记的卡片 DOM 元素
- * @param {Object} note - 笔记对象 { id, content, timestamp, sourceUrl, sourceTitle }
- * @returns {HTMLElement} 笔记卡片元素
- */
 function createNoteCard(note) {
-  const div = document.createElement('div');
-  div.className = 'note-card';
+  const card = document.createElement('article');
+  const category = findCategory(note.categoryId);
+  const categoryName = category ? category.name : '未分类';
+  const categoryColor = category ? category.color : '#aeaeb2';
+  card.className = 'note-card';
+  card.style.setProperty('--category-color', categoryColor);
 
-  const pageTitle = note.sourceTitle || note.sourceUrl;
-  const metaHtml = buildMetaHtml(note, pageTitle);
+  const header = document.createElement('div');
+  header.className = 'card-header';
+  header.innerHTML = `<span class="category-badge"><span class="category-dot"></span>${escapeHtml(categoryName)}</span>
+    <button class="delete-btn" type="button" title="删除笔记" aria-label="删除笔记">×</button>`;
+  header.querySelector('.delete-btn').addEventListener('click', () => deleteNote(note.id));
 
-  div.innerHTML = `
-    <div class="delete-btn" data-id="${note.id}" title="删除">×</div>
-    <div class="note-content" 
-         contenteditable="true" 
-         data-id="${note.id}" 
-         title="点击即可编辑内容">${escapeHtml(note.content)}</div>
-    ${metaHtml}
-  `;
-
-  return div;
-}
-
-/**
- * 构建笔记的元数据 HTML（时间和来源信息）
- * @param {Object} note - 笔记对象
- * @param {string} pageTitle - 页面标题
- * @returns {string} 元数据 HTML 字符串
- */
-function buildMetaHtml(note, pageTitle) {
-  return `<div class="note-meta">
-    <span class="meta-time">${note.timestamp}</span>
-    <span class="meta-source screen-only">来自: <a href="${note.sourceUrl}" target="_blank">${escapeHtml(pageTitle)}</a></span>
-    <span class="meta-source print-only" style="display:none">
-      来自: <a href="${note.sourceUrl}">${escapeHtml(pageTitle)}</a>
-    </span>
-  </div>`;
-}
-
-/**
- * 绑定笔记卡片的交互事件（删除、编辑）
- */
-function bindNoteEvents() {
-  // 删除按钮事件
-  document.querySelectorAll('.delete-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      deleteNote(parseInt(e.target.dataset.id));
-    });
+  const content = document.createElement('div');
+  content.className = 'note-content';
+  content.contentEditable = 'true';
+  content.title = '点击即可编辑内容';
+  content.textContent = note.content || '';
+  content.addEventListener('focus', () => card.classList.add('editing'));
+  content.addEventListener('blur', () => {
+    card.classList.remove('editing');
+    updateNoteContent(note.id, content.innerText.trim());
+  });
+  content.addEventListener('keydown', event => {
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') content.blur();
   });
 
-  // 笔记内容编辑事件
-  document.querySelectorAll('.note-content').forEach(el => {
-    el.addEventListener('focus', (e) => {
-      // 进入编辑状态时添加编辑类
-      e.target.closest('.note-card').classList.add('editing');
-    });
+  const meta = document.createElement('div');
+  meta.className = 'note-meta';
+  const time = document.createElement('span');
+  time.className = 'meta-time';
+  time.textContent = note.timestamp || '时间未知';
+  meta.appendChild(time);
 
-    el.addEventListener('blur', (e) => {
-      // 编辑完成后移除编辑类并保存
-      e.target.closest('.note-card').classList.remove('editing');
-      updateNoteContent(parseInt(e.target.dataset.id), e.target.innerText);
-    });
-  });
+  if (note.sourceUrl || note.sourceTitle) {
+    meta.appendChild(separatorDot());
+    const source = document.createElement('span');
+    source.className = 'meta-source screen-only';
+    source.append('来自：');
+    const link = document.createElement('a');
+    link.href = safeUrl(note.sourceUrl);
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = note.sourceTitle || note.sourceUrl || '未知来源';
+    source.appendChild(link);
+    meta.appendChild(source);
 
-  // 为每个卡片添加鼠标移动监听，使光晕跟随鼠标
-  document.querySelectorAll('.note-card').forEach(card => {
-    card.addEventListener('mousemove', (e) => {
-      const rect = card.getBoundingClientRect();
-      const x = ((e.clientX - rect.left) / rect.width) * 100;
-      const y = ((e.clientY - rect.top) / rect.height) * 100;
-      card.style.setProperty('--mouse-x', x + '%');
-      card.style.setProperty('--mouse-y', y + '%');
-    });
+    const printSource = document.createElement('span');
+    printSource.className = 'meta-source print-only';
+    printSource.textContent = `来源：${note.sourceTitle || note.sourceUrl || '未知来源'}`;
+    meta.appendChild(printSource);
+  }
 
-    card.addEventListener('mouseleave', () => {
-      // 鼠标离开时重置到中心，视觉上渐隐
-      card.style.setProperty('--mouse-x', '50%');
-      card.style.setProperty('--mouse-y', '50%');
+  const picker = document.createElement('label');
+  picker.className = 'category-picker';
+  picker.title = '移动分类';
+  picker.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h6l2 2h10v10H3z"></path></svg>';
+  const select = document.createElement('select');
+  select.setAttribute('aria-label', '移动分类');
+  populateCategorySelect(select, note.categoryId || '');
+  select.addEventListener('change', () => moveNoteToCategory(note.id, select.value));
+  picker.appendChild(select);
+  meta.appendChild(picker);
+
+  card.append(header, content, meta);
+  return card;
+}
+
+function separatorDot() {
+  const dot = document.createElement('span');
+  dot.className = 'meta-separator';
+  return dot;
+}
+
+function populateCategorySelect(select, selectedValue) {
+  select.replaceChildren();
+  select.add(new Option('未分类', '', false, selectedValue === '' || selectedValue == null));
+  state.categories.forEach(category => select.add(new Option(category.name, category.id, false, category.id === selectedValue)));
+}
+
+function selectCategory(categoryId) {
+  state.activeCategory = categoryId;
+  state.recentOnly = false;
+  DOM.recentFilter.classList.remove('selected');
+  render();
+}
+
+function getVisibleNotes() {
+  let notes = [...state.notes];
+  if (state.activeCategory === 'uncategorized') notes = notes.filter(note => !note.categoryId || !findCategory(note.categoryId));
+  else if (state.activeCategory !== 'all') notes = notes.filter(note => note.categoryId === state.activeCategory);
+
+  if (state.recentOnly) notes = notes.slice(0, 10);
+  if (state.search) {
+    notes = notes.filter(note => {
+      const category = findCategory(note.categoryId);
+      const haystack = [note.content, note.sourceTitle, note.sourceUrl, category?.name].filter(Boolean).join(' ').toLocaleLowerCase('zh-CN');
+      return haystack.includes(state.search);
     });
+  }
+  return notes;
+}
+
+function updatePageHeading(visibleCount) {
+  let title = '全部笔记';
+  if (state.recentOnly) title = '最近添加';
+  else if (state.activeCategory === 'uncategorized') title = '未分类';
+  else if (state.activeCategory !== 'all') title = findCategory(state.activeCategory)?.name || '全部笔记';
+
+  DOM.viewTitle.textContent = title;
+  const organizedCount = state.notes.filter(note => Boolean(findCategory(note.categoryId))).length;
+  const searchText = state.search ? ` · 找到 ${visibleCount} 条` : '';
+  DOM.viewSubtitle.textContent = `共 ${state.notes.length} 条笔记 · 已整理 ${organizedCount} 条${searchText}`;
+}
+
+function countForCategory(categoryId) {
+  if (categoryId == null) return state.notes.filter(note => !note.categoryId || !findCategory(note.categoryId)).length;
+  return state.notes.filter(note => note.categoryId === categoryId).length;
+}
+
+function findCategory(categoryId) {
+  return state.categories.find(category => category.id === categoryId);
+}
+
+function renderColorOptions() {
+  const container = document.getElementById('color-options');
+  CATEGORY_COLORS.forEach((color, index) => {
+    const label = document.createElement('label');
+    label.className = 'color-option';
+    label.style.setProperty('--swatch', color);
+    label.innerHTML = `<input type="radio" name="category-color" value="${color}" ${index === 0 ? 'checked' : ''}><span title="${color}"></span>`;
+    container.appendChild(label);
   });
 }
 
-/**
- * 更新笔记内容到存储
- * @param {number} id - 笔记 ID
- * @param {string} newContent - 新内容
- */
-function updateNoteContent(id, newContent) {
-  chrome.storage.local.get({ notes: [] }, (result) => {
-    const noteIndex = result.notes.findIndex(n => n.id === id);
+function openCategoryDialog() {
+  DOM.categoryForm.reset();
+  DOM.categoryError.textContent = '';
+  DOM.categoryDialog.showModal();
+  requestAnimationFrame(() => DOM.categoryName.focus());
+}
 
-    // 仅在内容确实改变时更新存储
-    if (noteIndex !== -1 && result.notes[noteIndex].content !== newContent) {
-      result.notes[noteIndex].content = newContent;
-      chrome.storage.local.set({ notes: result.notes });
-    }
+async function createCategory(event) {
+  event.preventDefault();
+  const name = DOM.categoryName.value.trim();
+  const color = DOM.categoryForm.elements['category-color'].value;
+  if (!name) return;
+  if (state.categories.some(category => category.name.toLocaleLowerCase('zh-CN') === name.toLocaleLowerCase('zh-CN'))) {
+    DOM.categoryError.textContent = '已经有同名分类了。';
+    return;
+  }
+
+  state.categories.push({ id: `category-${Date.now()}`, name, color });
+  await storageSet({ categories: state.categories });
+  DOM.categoryDialog.close();
+  render();
+  showToast(`已创建分类“${name}”`);
+}
+
+function openManageDialog() {
+  renderManageCategories();
+  DOM.manageDialog.showModal();
+}
+
+function renderManageCategories() {
+  DOM.manageList.replaceChildren();
+  if (!state.categories.length) {
+    DOM.manageList.innerHTML = '<div class="manage-empty">还没有自定义分类</div>';
+    return;
+  }
+
+  state.categories.forEach(category => {
+    const row = document.createElement('div');
+    row.className = 'manage-row';
+
+    const color = document.createElement('input');
+    color.className = 'manage-color';
+    color.type = 'color';
+    color.value = category.color;
+    color.title = '修改颜色';
+    color.addEventListener('change', () => updateCategory(category.id, { color: color.value }));
+
+    const name = document.createElement('input');
+    name.className = 'manage-name';
+    name.value = category.name;
+    name.maxLength = 16;
+    name.setAttribute('aria-label', `修改“${category.name}”分类名称`);
+    name.addEventListener('change', () => {
+      const newName = name.value.trim();
+      if (!newName || state.categories.some(item => item.id !== category.id && item.name.toLocaleLowerCase('zh-CN') === newName.toLocaleLowerCase('zh-CN'))) {
+        name.value = category.name;
+        showToast('分类名称不能为空或重复');
+        return;
+      }
+      updateCategory(category.id, { name: newName });
+    });
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'manage-delete';
+    remove.textContent = '删除';
+    remove.addEventListener('click', () => deleteCategory(category.id));
+    row.append(color, name, remove);
+    DOM.manageList.appendChild(row);
   });
 }
 
-/**
- * 删除单条笔记
- * @param {number} id - 笔记 ID
- */
-function deleteNote(id) {
+async function updateCategory(categoryId, changes) {
+  const category = findCategory(categoryId);
+  if (!category) return;
+  Object.assign(category, changes);
+  await storageSet({ categories: state.categories });
+  render();
+  renderManageCategories();
+}
+
+async function deleteCategory(categoryId) {
+  const category = findCategory(categoryId);
+  if (!category || !confirm(`确定删除分类“${category.name}”吗？其中的笔记会移至“未分类”。`)) return;
+  state.categories = state.categories.filter(item => item.id !== categoryId);
+  state.notes = state.notes.map(note => note.categoryId === categoryId ? { ...note, categoryId: null } : note);
+  if (state.activeCategory === categoryId) state.activeCategory = 'uncategorized';
+  await storageSet({ categories: state.categories, notes: state.notes });
+  render();
+  renderManageCategories();
+  showToast('分类已删除，笔记已移至“未分类”');
+}
+
+function openNoteDialog() {
+  DOM.noteForm.reset();
+  const initialCategory = state.activeCategory !== 'all' && state.activeCategory !== 'uncategorized' ? state.activeCategory : '';
+  populateCategorySelect(DOM.noteCategoryInput, initialCategory);
+  DOM.noteDialog.showModal();
+  requestAnimationFrame(() => DOM.noteContentInput.focus());
+}
+
+async function createNote(event) {
+  event.preventDefault();
+  const content = DOM.noteContentInput.value.trim();
+  if (!content) return;
+  const sourceUrl = DOM.noteSourceInput.value.trim();
+  const note = {
+    id: Date.now(),
+    content,
+    categoryId: DOM.noteCategoryInput.value || null,
+    sourceUrl,
+    sourceTitle: sourceUrl ? getHostname(sourceUrl) : '',
+    timestamp: new Date().toLocaleString('zh-CN', { hour12: false })
+  };
+  state.notes.unshift(note);
+  await storageSet({ notes: state.notes });
+  DOM.noteDialog.close();
+  render();
+  showToast('笔记已保存');
+}
+
+async function moveNoteToCategory(noteId, categoryId) {
+  const note = state.notes.find(item => String(item.id) === String(noteId));
+  if (!note) return;
+  note.categoryId = categoryId || null;
+  await storageSet({ notes: state.notes });
+  render();
+  showToast(`已移至“${findCategory(categoryId)?.name || '未分类'}”`);
+}
+
+async function updateNoteContent(noteId, newContent) {
+  const note = state.notes.find(item => String(item.id) === String(noteId));
+  if (!note || note.content === newContent) return;
+  note.content = newContent;
+  await storageSet({ notes: state.notes });
+  showToast('内容已保存');
+}
+
+async function deleteNote(noteId) {
   if (!confirm('确定删除这条笔记吗？')) return;
-
-  chrome.storage.local.get({ notes: [] }, (result) => {
-    const newNotes = result.notes.filter(n => n.id !== id);
-    chrome.storage.local.set({ notes: newNotes }, loadNotes);
-  });
+  state.notes = state.notes.filter(note => String(note.id) !== String(noteId));
+  await storageSet({ notes: state.notes });
+  render();
+  showToast('笔记已删除');
 }
 
-/**
- * 清空所有笔记
- */
-function clearAllNotes() {
-  if (confirm('确定清空所有笔记吗？此操作不可恢复！')) {
-    chrome.storage.local.set({ notes: [] }, loadNotes);
+async function clearVisibleNotes() {
+  const visibleNotes = getVisibleNotes();
+  if (!visibleNotes.length) return;
+  const scope = state.activeCategory === 'all' && !state.search && !state.recentOnly ? '所有笔记' : `当前视图中的 ${visibleNotes.length} 条笔记`;
+  if (!confirm(`确定清空${scope}吗？此操作不可恢复。`)) return;
+  const visibleIds = new Set(visibleNotes.map(note => String(note.id)));
+  state.notes = state.notes.filter(note => !visibleIds.has(String(note.id)));
+  await storageSet({ notes: state.notes });
+  render();
+  showToast('已完成清空');
+}
+
+function handleShortcuts(event) {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+    event.preventDefault();
+    DOM.searchInput.focus();
   }
+  if (event.key === 'Escape') DOM.exportMenu.classList.remove('show');
 }
 
-// ==================== 导出菜单控制 ====================
-
-/**
- * 切换导出菜单的显示/隐藏
- */
-function toggleExportMenu() {
-  DOM.exportMenu.classList.toggle('show');
+function toggleExportMenu(event) {
+  event.stopPropagation();
+  const isOpen = DOM.exportMenu.classList.toggle('show');
+  DOM.exportBtn.setAttribute('aria-expanded', String(isOpen));
 }
 
-/**
- * 点击菜单外部时关闭菜单
- * @param {Event} e - 点击事件
- */
-function closeExportMenuOnClickOutside(e) {
-  if (!e.target.closest('.export-menu-wrapper')) {
+function closeFloatingMenus(event) {
+  if (!event.target.closest('.export-menu-wrapper')) {
     DOM.exportMenu.classList.remove('show');
+    DOM.exportBtn.setAttribute('aria-expanded', 'false');
   }
 }
 
-/**
- * 处理导出选项的点击事件
- * @param {Event} e - 点击事件
- */
-function handleExport(e) {
-  const format = e.currentTarget.dataset.format;
+function handleExport(event) {
   DOM.exportMenu.classList.remove('show');
-
-  // 根据选择的格式调用对应的导出函数
-  switch (format) {
-    case 'txt':
-      exportAsTxt();
-      break;
-    case 'word':
-      exportAsWord();
-      break;
-    case 'pdf':
-      exportAsPdf();
-      break;
-  }
+  const format = event.currentTarget.dataset.format;
+  if (format === 'txt') exportAsTxt();
+  if (format === 'word') exportAsWord();
+  if (format === 'pdf') exportAsPdf();
 }
 
-// ==================== 导出功能 ====================
-
-/**
- * 获取导出选项（是否包含时间和来源）
- * @returns {Object} { source: boolean, time: boolean }
- */
-function getOptions() {
+function getExportOptions() {
   return {
-    source: document.getElementById('export-include-source').checked,
-    time: document.getElementById('export-include-time').checked
+    category: document.getElementById('export-include-category').checked,
+    time: document.getElementById('export-include-time').checked,
+    source: document.getElementById('export-include-source').checked
   };
 }
 
-/**
- * 导出为纯文本格式 (TXT)
- */
 function exportAsTxt() {
-  chrome.storage.local.get({ notes: [] }, (result) => {
-    const opts = getOptions();
-    let text = "";
-
-    result.notes.forEach(note => {
-      text += note.content + "\n";
-      if (opts.time) text += `时间: ${note.timestamp}\n`;
-      if (opts.source) {
-        const title = note.sourceTitle || "未知网页";
-        text += `来源: ${title} (${note.sourceUrl})\n`;
-      }
-      text += "--------------------------------------------------\n\n";
-    });
-
-    downloadFile(new Blob([text], { type: "text/plain;charset=utf-8" }), "my-notes.txt");
-  });
+  const options = getExportOptions();
+  const text = getVisibleNotes().map(note => {
+    const lines = [note.content || ''];
+    if (options.category) lines.push(`分类：${findCategory(note.categoryId)?.name || '未分类'}`);
+    if (options.time) lines.push(`时间：${note.timestamp || ''}`);
+    if (options.source && (note.sourceTitle || note.sourceUrl)) lines.push(`来源：${note.sourceTitle || '未知网页'}${note.sourceUrl ? ` (${note.sourceUrl})` : ''}`);
+    return lines.join('\n');
+  }).join('\n--------------------------------------------------\n\n');
+  downloadFile(new Blob([text], { type: 'text/plain;charset=utf-8' }), '句存笔记.txt');
 }
 
-/**
- * 导出为 Microsoft Word 格式 (DOCX)
- */
 function exportAsWord() {
-  const opts = getOptions();
-
-  chrome.storage.local.get({ notes: [] }, (result) => {
-    let html = `<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head>
-  <meta charset="UTF-8">
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-  <style>
-    /* 基础样式 */
-    body { 
-      font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
-      font-size: 11pt;
-      line-height: 1.5;
-      margin: 1in;
-      color: #1D1D1F;
-    }
-    
-    /* 笔记项目样式 */
-    .note-item { 
-      margin-bottom: 24pt; 
-      page-break-inside: avoid;
-    }
-    
-    /* 笔记标题（正文）样式 */
-    .note-title { 
-      font-weight: normal; 
-      font-size: 12pt; 
-      margin-bottom: 8pt;
-      font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
-      color: #000000;
-    }
-    
-    /* 元数据（时间、来源）样式 */
-    .note-meta { 
-      font-size: 10pt; 
-      color: #666666; 
-      margin-bottom: 8pt;
-      font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
-    }
-    
-    /* 元数据行样式 */
-    .note-meta-line { 
-      margin-bottom: 4pt;
-      display: block;
-    }
-    
-    /* 链接样式 */
-    .note-meta a {
-      color: #0071E3;
-      text-decoration: none;
-    }
-    
-    /* 分隔线样式 */
-    hr { 
-      border: none; 
-      border-top: 1px solid #dddddd; 
-      margin: 16pt 0;
-    }
-    
-    /* 文档标题样式 */
-    h1 {
-      text-align: left;
-      font-size: 18pt;
-      margin-bottom: 30pt;
-      font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
-      font-weight: normal;
-      color: #000000;
-    }
-  </style>
-</head>
-<body>`;
-
-    // 添加文档标题
-    html += `<h1>全部笔记</h1>`;
-
-    // 循环添加每条笔记
-    result.notes.forEach(note => {
-      html += `<div class="note-item">`;
-      html += `<div class="note-title">${escapeHtml(note.content)}</div>`;
-
-      // 根据用户选择添加元数据
-      if (opts.time || opts.source) {
-        html += `<div class="note-meta">`;
-        if (opts.time) html += `<span class="note-meta-line">时间: ${note.timestamp}</span>`;
-        if (opts.source) {
-          const title = note.sourceTitle || note.sourceUrl;
-          html += `<span class="note-meta-line">来源: <a href="${note.sourceUrl}">${escapeHtml(title)}</a></span>`;
-        }
-        html += `</div>`;
-      }
-
-      html += `<hr></div>`;
-    });
-
-    html += `</body></html>`;
-
-    // 创建 Blob 并下载（使用标准 Office Open XML MIME 类型）
-    const blob = new Blob([html], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
-    downloadFile(blob, "my-notes.docx");
-  });
+  const options = getExportOptions();
+  const notesHtml = getVisibleNotes().map(note => {
+    const meta = [];
+    if (options.category) meta.push(`分类：${escapeHtml(findCategory(note.categoryId)?.name || '未分类')}`);
+    if (options.time) meta.push(`时间：${escapeHtml(note.timestamp || '')}`);
+    if (options.source && (note.sourceTitle || note.sourceUrl)) meta.push(`来源：${escapeHtml(note.sourceTitle || note.sourceUrl)}`);
+    return `<article><div class="content">${escapeHtml(note.content || '').replace(/\n/g, '<br>')}</div><div class="meta">${meta.join('<br>')}</div></article>`;
+  }).join('');
+  const html = `<!doctype html><html><head><meta charset="UTF-8"><style>body{font-family:"Microsoft YaHei","Segoe UI",sans-serif;margin:1in;color:#1d1d1f}h1{font-size:20pt}article{margin:0 0 24pt;page-break-inside:avoid}.content{font-size:12pt;line-height:1.7}.meta{margin-top:7pt;color:#666;font-size:9pt;line-height:1.6}</style></head><body><h1>${escapeHtml(DOM.viewTitle.textContent)}</h1>${notesHtml}</body></html>`;
+  downloadFile(new Blob([html], { type: 'application/msword;charset=utf-8' }), '句存笔记.doc');
 }
 
-/**
- * 导出为 PDF 格式
- * 使用浏览器的打印功能生成 PDF
- */
 function exportAsPdf() {
-  const opts = getOptions();
+  const options = getExportOptions();
   document.body.classList.add('printing-mode');
-
-  // 当用户选择不包含来源时，通过添加类强制隐藏（覆盖 CSS 中的 !important）
-  if (!opts.source) document.body.classList.add('hide-source');
-
-  // 获取需要控制显示的元素（仍保留用于屏幕即时预览回退）
-  const timeDoms = document.querySelectorAll('.meta-time');
-  const sourceDoms = document.querySelectorAll('.meta-source');
-
-  // 根据用户选择显示或隐藏元数据（用于屏幕预览）
-  timeDoms.forEach(el => el.style.display = opts.time ? '' : 'none');
-  sourceDoms.forEach(el => el.style.display = opts.source ? '' : 'none');
-
-  // 打开打印对话框
+  document.body.classList.toggle('hide-category', !options.category);
+  document.body.classList.toggle('hide-time', !options.time);
+  document.body.classList.toggle('hide-source', !options.source);
   window.print();
-
-  // 恢复页面状态
-  document.body.classList.remove('printing-mode');
-  if (!opts.source) document.body.classList.remove('hide-source');
-  timeDoms.forEach(el => el.style.display = '');
-  sourceDoms.forEach(el => el.style.display = '');
+  document.body.classList.remove('printing-mode', 'hide-category', 'hide-time', 'hide-source');
 }
 
-/**
- * 通过创建虚拟链接的方式下载文件
- * @param {Blob} blob - 文件内容
- * @param {string} filename - 文件名
- */
 function downloadFile(blob, filename) {
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-/**
- * 转义 HTML 特殊字符
- * @param {string} text - 需要转义的文本
- * @returns {string} 转义后的文本
- */
-function escapeHtml(text) {
-  if (!text) return "";
-  return text
-    .replace(/&/g, "&amp;")    // & → &amp;
-    .replace(/</g, "&lt;")     // < → &lt;
-    .replace(/>/g, "&gt;")     // > → &gt;
-    .replace(/"/g, "&quot;")   // " → &quot;
-    .replace(/'/g, "&#039;");  // ' → &#039;
+function showToast(message) {
+  clearTimeout(toastTimer);
+  DOM.toast.textContent = message;
+  DOM.toast.classList.add('show');
+  toastTimer = setTimeout(() => DOM.toast.classList.remove('show'), 1800);
+}
+
+function safeUrl(url) {
+  if (!url) return '#';
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : '#';
+  } catch {
+    return '#';
+  }
+}
+
+function getHostname(url) {
+  try { return new URL(url).hostname; } catch { return url; }
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function storageGet(defaults) {
+  return new Promise(resolve => chrome.storage.local.get(defaults, resolve));
+}
+
+function storageSet(values) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set(values, () => {
+      if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+      else resolve();
+    });
+  });
 }

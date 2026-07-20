@@ -2,7 +2,7 @@
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "save-to-note",
-    title: "保存到 LightNote",
+    title: "保存到句存",
     contexts: ["selection"] // 只有选中文字时才显示
   });
 });
@@ -18,6 +18,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     const note = {
       id: Date.now(), // 唯一ID
       content: info.selectionText,
+      categoryId: null, // 新笔记默认进入“未分类”
       sourceUrl: tab.url,
       sourceTitle: tab.title, // 部分浏览器可能取不到，作为备用
       timestamp: new Date().toLocaleString('zh-CN', { hour12: false })

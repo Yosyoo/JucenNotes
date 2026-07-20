@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>句存｜笔记分类 UI 评审</title>
+  <style>
+    :root {
+      --bg: #f5f5f7;
+      --surface: rgba(255, 255, 255, 0.78);
+      --surface-strong: #ffffff;
+      --text: #1d1d1f;
+      --text-2: #6e6e73;
+      --text-3: #9a9aa0;
+      --blue: #0071e3;
+      --blue-soft: #eaf4ff;
+      --border: rgba(29, 29, 31, 0.08);
+      --shadow: 0 1px 3px rgba(0,0,0,.05), 0 12px 32px rgba(0,0,0,.035);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-width: 1180px;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 12% 8%, rgba(0,113,227,.08), transparent 24%),
+        radial-gradient(circle at 90% 88%, rgba(175,82,222,.06), transparent 22%),
+        var(--bg);
+      font-family: "Noto Sans SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .topbar {
+      height: 68px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      background: rgba(255,255,255,.78);
+      border-bottom: 1px solid rgba(0,0,0,.055);
+      backdrop-filter: saturate(180%) blur(22px);
+    }
+
+    .topbar-inner {
+      width: 1180px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 240px 1fr 240px;
+      align-items: center;
+      gap: 28px;
+    }
+
+    .brand { display: flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 700; letter-spacing: -.2px; }
+    .brand-mark {
+      width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+      color: #fff; background: linear-gradient(145deg, #1684ef, #0066cc); box-shadow: 0 5px 12px rgba(0,113,227,.22);
+    }
+    .brand-mark svg { width: 19px; height: 19px; }
+
+    .search {
+      height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 14px;
+      border-radius: 12px; color: var(--text-2); background: rgba(118,118,128,.10);
+      border: 1px solid rgba(0,0,0,.025); font-size: 13px;
+    }
+    .search svg { width: 17px; height: 17px; color: #7c7c80; }
+    .search kbd { margin-left: auto; padding: 2px 7px; border-radius: 6px; color: #8e8e93; background: rgba(255,255,255,.72); font: 11px/18px inherit; }
+
+    .top-actions { display: flex; justify-content: flex-end; gap: 10px; }
+    button { font: inherit; }
+    .button {
+      height: 38px; padding: 0 14px; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+      border: 0; border-radius: 10px; font-size: 13px; font-weight: 600; color: var(--text);
+      background: rgba(118,118,128,.10);
+    }
+    .button svg { width: 15px; height: 15px; }
+    .button.primary { color: #fff; background: var(--blue); box-shadow: 0 4px 10px rgba(0,113,227,.22); }
+
+    .app-shell {
+      width: 1180px;
+      margin: 0 auto;
+      padding: 30px 0 64px;
+      display: grid;
+      grid-template-columns: 240px minmax(0, 1fr);
+      gap: 28px;
+      align-items: start;
+    }
+
+    .sidebar {
+      position: sticky; top: 98px;
+      padding: 18px 14px 14px;
+      border: 1px solid rgba(255,255,255,.7);
+      border-radius: 18px;
+      background: rgba(255,255,255,.62);
+      box-shadow: var(--shadow);
+      backdrop-filter: saturate(160%) blur(14px);
+    }
+    .side-head { height: 34px; padding: 0 8px 8px; display: flex; align-items: center; justify-content: space-between; }
+    .side-head span { color: var(--text-2); font-size: 12px; font-weight: 700; letter-spacing: .6px; }
+    .icon-button { width: 28px; height: 28px; border: 0; border-radius: 8px; display: grid; place-items: center; color: var(--blue); background: var(--blue-soft); }
+    .icon-button svg { width: 14px; height: 14px; }
+    .category-list { display: flex; flex-direction: column; gap: 4px; }
+    .category {
+      height: 42px; padding: 0 10px; border-radius: 11px; display: flex; align-items: center; gap: 10px;
+      color: #515154; font-size: 13px; font-weight: 520;
+    }
+    .category.selected { color: #0067cf; background: var(--blue-soft); font-weight: 650; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.04); }
+    .dot.all { width: 16px; height: 16px; color: currentColor; box-shadow: none; }
+    .count { margin-left: auto; min-width: 22px; color: #9a9aa0; font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
+    .selected .count { color: #5c96d0; }
+    .side-divider { height: 1px; margin: 12px 8px; background: rgba(0,0,0,.07); }
+    .smart-row { height: 38px; padding: 0 10px; display: flex; align-items: center; gap: 10px; color: var(--text-2); font-size: 12px; }
+    .smart-row svg { width: 15px; height: 15px; color: #8e8e93; }
+    .side-tip { margin: 10px 8px 0; padding: 11px 12px; border-radius: 11px; color: #77777c; background: rgba(118,118,128,.07); font-size: 11px; line-height: 1.55; }
+
+    .main { min-width: 0; }
+    .page-head { display: flex; align-items: flex-end; justify-content: space-between; padding: 2px 4px 22px; }
+    .eyebrow { margin-bottom: 5px; color: var(--blue); font-size: 12px; font-weight: 700; }
+    h1 { margin: 0; font-size: 30px; line-height: 1.2; letter-spacing: -.7px; }
+    .subtitle { margin-top: 7px; color: var(--text-2); font-size: 13px; }
+    .head-actions { display: flex; gap: 9px; }
+    .button.light { border: 1px solid var(--border); background: rgba(255,255,255,.76); }
+
+    .filterbar {
+      margin-bottom: 16px; padding: 8px; display: flex; align-items: center; gap: 6px;
+      border-radius: 14px; border: 1px solid rgba(255,255,255,.78); background: rgba(255,255,255,.58); box-shadow: 0 1px 2px rgba(0,0,0,.025);
+      backdrop-filter: blur(12px);
+    }
+    .filter-pill { height: 32px; padding: 0 12px; border-radius: 9px; display: flex; align-items: center; gap: 7px; color: var(--text-2); font-size: 12px; font-weight: 560; }
+    .filter-pill.active { color: #0067cf; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+    .filter-pill b { color: #aaaab0; font-size: 10px; font-weight: 600; }
+    .filter-spacer { flex: 1; }
+    .sort { padding-right: 9px; color: var(--text-2); font-size: 12px; display: flex; align-items: center; gap: 6px; }
+    .sort svg { width: 14px; height: 14px; }
+
+    .note-list { display: flex; flex-direction: column; gap: 14px; }
+    .note-card {
+      position: relative; overflow: hidden;
+      padding: 22px 24px 18px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,.72);
+      background: rgba(255,255,255,.72);
+      box-shadow: var(--shadow);
+      backdrop-filter: saturate(170%) blur(10px);
+    }
+    .note-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--card-accent); }
+    .card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 13px; }
+    .tag { height: 26px; padding: 0 9px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px; color: var(--tag-text); background: var(--tag-bg); font-size: 11px; font-weight: 650; }
+    .tag .dot { width: 7px; height: 7px; background: var(--tag-text); box-shadow: none; }
+    .more { width: 30px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: #9a9aa0; background: rgba(118,118,128,.06); }
+    .more svg { width: 16px; height: 16px; }
+    .note-text { max-width: 760px; color: #303033; font-size: 15px; line-height: 1.72; letter-spacing: .02px; }
+    .note-meta { margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(29,29,31,.07); display: flex; align-items: center; gap: 10px; color: var(--text-3); font-size: 11px; }
+    .source { max-width: 460px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #4d84bc; }
+    .meta-sep { width: 3px; height: 3px; border-radius: 50%; background: #c7c7cc; }
+    .move-action { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; color: #747479; font-weight: 550; }
+    .move-action svg { width: 13px; height: 13px; }
+
+    .work { --card-accent:#5856d6; --tag-text:#4b49bb; --tag-bg:#efefff; }
+    .study { --card-accent:#34c759; --tag-text:#248d40; --tag-bg:#eaf8ed; }
+    .idea { --card-accent:#ff9f0a; --tag-text:#b76a00; --tag-bg:#fff4df; }
+
+    .review-note {
+      margin-top: 18px; padding: 13px 16px; border-radius: 13px; display: flex; align-items: center; gap: 10px;
+      color: #536170; background: rgba(234,244,255,.78); border: 1px solid rgba(0,113,227,.10); font-size: 11px;
+    }
+    .review-note svg { width: 15px; height: 15px; color: var(--blue); flex: none; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        </div>
+        <span>句存</span>
+      </div>
+
+      <div class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <span>搜索笔记内容、来源或分类</span>
+        <kbd>⌘ K</kbd>
+      </div>
+
+      <div class="top-actions">
+        <button class="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>
+          导出
+        </button>
+        <button class="button primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+          新建笔记
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="side-head">
+        <span>笔记分类</span>
+        <button class="icon-button" aria-label="新建分类">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </div>
+
+      <div class="category-list">
+        <div class="category selected">
+          <svg class="dot all" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          全部笔记 <span class="count">24</span>
+        </div>
+        <div class="category"><span class="dot" style="background:#5856d6"></span>工作<span class="count">8</span></div>
+        <div class="category"><span class="dot" style="background:#34c759"></span>学习<span class="count">6</span></div>
+        <div class="category"><span class="dot" style="background:#ff9f0a"></span>灵感<span class="count">5</span></div>
+        <div class="category"><span class="dot" style="background:#ff375f"></span>生活<span class="count">3</span></div>
+        <div class="category"><span class="dot" style="background:#aeaeb2"></span>未分类<span class="count">2</span></div>
+      </div>
+
+      <div class="side-divider"></div>
+      <div class="smart-row">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M7 12h10M10 18h4"/></svg>
+        最近添加
+      </div>
+      <div class="smart-row">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 5-7"/></svg>
+        常用分类
+      </div>
+      <div class="side-tip">提示：可通过卡片右下角的“移动分类”，快速整理已有笔记。</div>
+    </aside>
+
+    <main class="main">
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">我的知识库</div>
+          <h1>全部笔记</h1>
+          <div class="subtitle">共 24 条笔记 · 已整理 22 条</div>
+        </div>
+        <div class="head-actions">
+          <button class="button light">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+            筛选
+          </button>
+          <button class="button light">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M7 12h10M10 18h4"/></svg>
+            管理分类
+          </button>
+        </div>
+      </div>
+
+      <div class="filterbar">
+        <div class="filter-pill active">全部 <b>24</b></div>
+        <div class="filter-pill">工作 <b>8</b></div>
+        <div class="filter-pill">学习 <b>6</b></div>
+        <div class="filter-pill">灵感 <b>5</b></div>
+        <div class="filter-spacer"></div>
+        <div class="sort">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 7h12M4 7h.01M8 12h9M4 12h.01M8 17h6M4 17h.01"/></svg>
+          最近更新
+        </div>
+      </div>
+
+      <section class="note-list">
+        <article class="note-card work">
+          <div class="card-top">
+            <span class="tag"><span class="dot"></span>工作</span>
+            <span class="more"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></span>
+          </div>
+          <div class="note-text">产品评审时，先明确用户要完成的核心任务，再讨论信息层级和交互细节。分类功能应该降低整理成本，而不是让用户在保存笔记前多做一次选择。</div>
+          <div class="note-meta">
+            <span>今天 14:32</span><span class="meta-sep"></span><span class="source">来自：如何做好一次高效的产品设计评审</span>
+            <span class="move-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h6l2 2h10v10H3z"/></svg>移动分类</span>
+          </div>
+        </article>
+
+        <article class="note-card study">
+          <div class="card-top">
+            <span class="tag"><span class="dot"></span>学习</span>
+            <span class="more"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></span>
+          </div>
+          <div class="note-text">知识管理系统的价值不在于收集数量，而在于能否在需要时快速找回。稳定的分类结构、全文搜索和来源信息，构成了最基础的检索路径。</div>
+          <div class="note-meta">
+            <span>昨天 21:08</span><span class="meta-sep"></span><span class="source">来自：Building a Second Brain</span>
+            <span class="move-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h6l2 2h10v10H3z"/></svg>移动分类</span>
+          </div>
+        </article>
+
+        <article class="note-card idea">
+          <div class="card-top">
+            <span class="tag"><span class="dot"></span>灵感</span>
+            <span class="more"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></span>
+          </div>
+          <div class="note-text">可以在保存网页摘录时自动推荐分类：优先参考来源域名、标题关键词和用户最近使用的分类，同时始终保留“稍后整理”的轻量入口。</div>
+          <div class="note-meta">
+            <span>7 月 18 日 09:41</span><span class="meta-sep"></span><span class="source">来自：AI-assisted Personal Knowledge Management</span>
+            <span class="move-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h6l2 2h10v10H3z"/></svg>移动分类</span>
+          </div>
+        </article>
+      </section>
+
+      <div class="review-note">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+        评审重点：分类入口是否足够直观、左侧分类是否适合现有信息量、卡片上的“移动分类”是否需要改成仅在悬停时显示。
+      </div>
+    </main>
+  </div>
+</body>
+</html>

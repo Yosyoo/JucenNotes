@@ -4,79 +4,168 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>我的笔记</title>
+  <title>句存 · 我的笔记</title>
   <link rel="stylesheet" href="manager.css">
 </head>
 
 <body>
-
   <nav class="navbar">
     <div class="nav-content">
-      <div class="brand">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-        </svg>
+      <div class="brand" aria-label="句存">
+        <img class="brand-icon" src="icon.png" alt="">
         <span>句存</span>
       </div>
 
+      <label class="search-box" for="search-input">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="7"></circle>
+          <path d="m20 20-3.5-3.5"></path>
+        </svg>
+        <input id="search-input" type="search" placeholder="搜索笔记内容、来源或分类" autocomplete="off">
+        <kbd>Ctrl K</kbd>
+      </label>
+
       <div class="toolbar">
-        <div class="action-group">
-          <div class="export-menu-wrapper">
-            <button id="export-btn" class="btn-primary" title="导出笔记">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              导出
-            </button>
-            <div id="export-menu" class="export-menu frosted">
-              <div class="export-options-container">
-                <button class="export-option" data-format="txt">
-                  <span class="format-name">TXT</span>
-                  <span class="format-desc">纯文本格式</span>
-                </button>
-                <button class="export-option" data-format="word">
-                  <span class="format-name">Word</span>
-                  <span class="format-desc">Microsoft Word</span>
-                </button>
-                <button class="export-option" data-format="pdf">
-                  <span class="format-name">PDF</span>
-                  <span class="format-desc">便携式文档</span>
-                </button>
-              </div>
-              <div class="export-settings">
-                <label class="export-checkbox">
-                  <input type="checkbox" id="export-include-time" checked>
-                  <span>包含时间</span>
-                </label>
-                <label class="export-checkbox">
-                  <input type="checkbox" id="export-include-source" checked>
-                  <span>包含来源</span>
-                </label>
-              </div>
+        <div class="export-menu-wrapper">
+          <button id="export-btn" class="button secondary" type="button" title="导出当前视图" aria-expanded="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <path d="m7 10 5 5 5-5"></path>
+              <path d="M12 15V3"></path>
+            </svg>
+            <span>导出</span>
+          </button>
+          <div id="export-menu" class="export-menu">
+            <div class="export-options-container">
+              <button class="export-option" type="button" data-format="txt">
+                <span class="format-name">TXT</span><span class="format-desc">纯文本格式</span>
+              </button>
+              <button class="export-option" type="button" data-format="word">
+                <span class="format-name">Word</span><span class="format-desc">Microsoft Word</span>
+              </button>
+              <button class="export-option" type="button" data-format="pdf">
+                <span class="format-name">PDF</span><span class="format-desc">使用系统打印</span>
+              </button>
+            </div>
+            <div class="export-settings">
+              <label><input type="checkbox" id="export-include-category" checked> 包含分类</label>
+              <label><input type="checkbox" id="export-include-time" checked> 包含时间</label>
+              <label><input type="checkbox" id="export-include-source" checked> 包含来源</label>
             </div>
           </div>
         </div>
+        <button id="new-note-btn" class="button primary" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M12 5v14M5 12h14"></path></svg>
+          <span>新建笔记</span>
+        </button>
       </div>
     </div>
   </nav>
 
-  <main class="container frosted">
-    <div class="header-placeholder"></div>
-    <div class="content-wrapper">
-      <div class="list-header">
-        <h2>全部笔记</h2>
-        <button id="clear-all" class="btn-text-danger">清空</button>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-heading">
+        <span>笔记分类</span>
+        <button id="add-category-btn" class="icon-button" type="button" title="新建分类" aria-label="新建分类">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"></path></svg>
+        </button>
+      </div>
+      <nav id="category-list" class="category-list" aria-label="笔记分类"></nav>
+      <div class="sidebar-divider"></div>
+      <button id="recent-filter" class="smart-filter" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M7 12h10M10 18h4"></path></svg>
+        最近添加
+      </button>
+      <button id="manage-categories-btn" class="smart-filter" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"></path></svg>
+        管理分类
+      </button>
+      <p class="sidebar-tip">可通过笔记卡片底部的分类菜单，快速整理已有笔记。</p>
+    </aside>
+
+    <main class="main-content">
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">我的知识库</p>
+          <h1 id="view-title">全部笔记</h1>
+          <p id="view-subtitle" class="subtitle">正在加载笔记…</p>
+        </div>
+        <div class="page-actions">
+          <button id="manage-categories-top" class="button light" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"></path></svg>
+            管理分类
+          </button>
+          <button id="clear-all" class="button danger-ghost" type="button">清空</button>
+        </div>
+      </header>
+
+      <div class="filterbar">
+        <div id="category-pills" class="filter-pills"></div>
+        <div class="sort-label">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 7h12M4 7h.01M8 12h9M4 12h.01M8 17h6M4 17h.01"></path></svg>
+          最近更新
+        </div>
       </div>
 
-      <div id="note-list" class="grid-layout">
+      <section id="note-list" class="note-list" aria-live="polite"></section>
+    </main>
+  </div>
+
+  <dialog id="category-dialog" class="modal">
+    <form id="category-form" class="modal-card" method="dialog">
+      <div class="modal-header">
+        <div><p class="eyebrow">整理笔记</p><h2>新建分类</h2></div>
+        <button class="modal-close" type="button" data-close-dialog="category-dialog" aria-label="关闭">×</button>
+      </div>
+      <label class="field-label" for="category-name">分类名称</label>
+      <input id="category-name" class="text-field" maxlength="16" placeholder="例如：阅读、项目、旅行" required>
+      <fieldset class="color-fieldset">
+        <legend>分类颜色</legend>
+        <div id="color-options" class="color-options"></div>
+      </fieldset>
+      <p id="category-error" class="form-error" role="alert"></p>
+      <div class="modal-actions">
+        <button class="button light" type="button" data-close-dialog="category-dialog">取消</button>
+        <button class="button primary" type="submit">创建分类</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="manage-dialog" class="modal wide-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div><p class="eyebrow">分类设置</p><h2>管理分类</h2></div>
+        <button class="modal-close" type="button" data-close-dialog="manage-dialog" aria-label="关闭">×</button>
+      </div>
+      <p class="modal-description">修改名称或颜色会立即保存。删除分类不会删除其中的笔记，这些笔记会移至“未分类”。</p>
+      <div id="manage-category-list" class="manage-category-list"></div>
+      <div class="modal-actions split-actions">
+        <button id="manage-add-category" class="button light" type="button">＋ 新建分类</button>
+        <button class="button primary" type="button" data-close-dialog="manage-dialog">完成</button>
       </div>
     </div>
-  </main>
+  </dialog>
 
+  <dialog id="note-dialog" class="modal">
+    <form id="note-form" class="modal-card" method="dialog">
+      <div class="modal-header">
+        <div><p class="eyebrow">快速记录</p><h2>新建笔记</h2></div>
+        <button class="modal-close" type="button" data-close-dialog="note-dialog" aria-label="关闭">×</button>
+      </div>
+      <label class="field-label" for="note-content-input">笔记内容</label>
+      <textarea id="note-content-input" class="text-field note-textarea" rows="6" maxlength="10000" placeholder="写下此刻值得保存的内容…" required></textarea>
+      <div class="two-column-fields">
+        <label><span class="field-label">分类</span><select id="note-category-input" class="text-field"></select></label>
+        <label><span class="field-label">来源（可选）</span><input id="note-source-input" class="text-field" type="url" placeholder="https://"></label>
+      </div>
+      <div class="modal-actions">
+        <button class="button light" type="button" data-close-dialog="note-dialog">取消</button>
+        <button class="button primary" type="submit">保存笔记</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="manager.js"></script>
 </body>
 
