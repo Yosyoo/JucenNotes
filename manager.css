@@ -165,7 +165,42 @@ h2 { font-size: 22px; }
 .card-header { min-height: 28px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .card-header-main { min-width: 0; display: flex; align-items: center; gap: 10px; }
 .note-select { width: 22px; height: 22px; flex: none; display: grid; place-items: center; cursor: pointer; }
-.note-select input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.note-select input {
+  position: relative;
+  width: 19px;
+  height: 19px;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid #b8b8be;
+  border-radius: 6px;
+  outline: 0;
+  background: rgba(255,255,255,.92);
+  box-shadow: inset 0 1px 1px rgba(0,0,0,.025);
+  cursor: pointer;
+  transition: border-color .16s, background .16s, box-shadow .16s, transform .16s;
+}
+.note-select input::after {
+  content: "";
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: translateY(-1px) rotate(45deg) scale(0);
+  transform-origin: center;
+  transition: transform .14s ease-out;
+}
+.note-select input:hover { border-color: #8e8e93; background: #fff; }
+.note-select input:checked {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: 0 2px 5px rgba(0,113,227,.22);
+}
+.note-select input:checked::after { transform: translateY(-1px) rotate(45deg) scale(1); }
+.note-select input:focus-visible { box-shadow: 0 0 0 3px rgba(0,113,227,.16); }
+.note-select input:active { transform: scale(.92); }
 .category-badge { height: 26px; padding: 0 9px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px; color: var(--category-color); background: color-mix(in srgb, var(--category-color) 11%, white); font-size: 11px; font-weight: 650; }
 .category-badge .category-dot { width: 7px; height: 7px; background: var(--category-color); box-shadow: none; }
 .delete-btn { width: 28px; height: 28px; border: 0; border-radius: 50%; display: grid; place-items: center; color: #8e8e93; background: #f2f2f7; opacity: 0; font-size: 16px; line-height: 1; transition: opacity .18s, color .18s, background .18s; }

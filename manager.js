@@ -413,9 +413,7 @@ function updatePageHeading(visibleCount) {
   else if (state.activeCategory !== 'all') title = findCategory(state.activeCategory)?.name || '全部笔记';
 
   DOM.viewTitle.textContent = title;
-  const organizedCount = state.notes.filter(note => Boolean(findCategory(note.categoryId))).length;
-  const searchText = state.search ? ` · 找到 ${visibleCount} 条` : '';
-  DOM.viewSubtitle.textContent = `共 ${state.notes.length} 条笔记 · 已整理 ${organizedCount} 条${searchText}`;
+  DOM.viewSubtitle.textContent = `共 ${visibleCount} 条笔记`;
 }
 
 function countForCategory(categoryId) {
@@ -734,7 +732,7 @@ function updateBatchControls(visibleNotes = getVisibleNotes()) {
     && visibleNotes.every(note => state.selectedNoteIds.has(NotesCore.noteIdKey(note.id)));
   DOM.batchActions.hidden = !state.selectionMode;
   DOM.batchSelectedCount.textContent = `已选择 ${selectedCount} 条`;
-  DOM.batchSelectAll.textContent = allVisibleSelected ? '取消全选' : '全选当前视图';
+  DOM.batchSelectAll.textContent = allVisibleSelected ? '取消全选' : '全选当前';
   DOM.batchSelectAll.disabled = !visibleNotes.length;
   DOM.batchExport.disabled = selectedCount === 0;
   DOM.batchDelete.disabled = selectedCount === 0;
