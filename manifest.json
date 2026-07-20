@@ -7,6 +7,15 @@
     "contextMenus",
     "storage"
   ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["selection-capture.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true
+    }
+  ],
   "background": {
     "service_worker": "background.js"
   },

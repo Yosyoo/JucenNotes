@@ -22,7 +22,6 @@
           <path d="m20 20-3.5-3.5"></path>
         </svg>
         <input id="search-input" type="search" placeholder="搜索笔记内容、来源或分类" autocomplete="off">
-        <kbd>Ctrl K</kbd>
       </label>
 
       <div class="toolbar">
@@ -52,15 +51,10 @@
       </div>
       <nav id="category-list" class="category-list" aria-label="笔记分类"></nav>
       <div class="sidebar-divider"></div>
-      <button id="recent-filter" class="smart-filter" type="button">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M7 12h10M10 18h4"></path></svg>
-        最近添加
-      </button>
       <button id="manage-categories-btn" class="smart-filter" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"></path></svg>
         管理分类
       </button>
-      <p class="sidebar-tip">可通过笔记卡片底部的分类菜单，快速整理已有笔记。</p>
     </aside>
 
     <main class="main-content">
@@ -141,6 +135,29 @@
       <div class="modal-actions">
         <button class="button light" type="button" data-close-dialog="note-dialog">取消</button>
         <button class="button primary" type="submit">保存笔记</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="confirm-dialog" class="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+    <form class="confirm-card" method="dialog">
+      <button class="modal-close confirm-close" type="submit" value="cancel" aria-label="关闭">×</button>
+      <div class="confirm-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9">
+          <path d="M4 7h16"></path>
+          <path d="M9 3h6l1 4H8l1-4Z"></path>
+          <path d="m7 7 .8 13h8.4L17 7"></path>
+          <path d="M10 11v5M14 11v5"></path>
+        </svg>
+      </div>
+      <div class="confirm-copy">
+        <p id="confirm-eyebrow" class="eyebrow">操作确认</p>
+        <h2 id="confirm-title">确认操作</h2>
+        <p id="confirm-message" class="confirm-message"></p>
+      </div>
+      <div class="modal-actions confirm-actions">
+        <button id="confirm-cancel" class="button light" type="submit" value="cancel">取消</button>
+        <button id="confirm-submit" class="button danger" type="submit" value="confirm">确认</button>
       </div>
     </form>
   </dialog>

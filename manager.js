@@ -13,8 +13,7 @@ const state = {
   notes: [],
   categories: [],
   activeCategory: 'all',
-  search: '',
-  recentOnly: false
+  search: ''
 };
 
 const DOM = {};
@@ -68,7 +67,12 @@ function cacheDom() {
     noteContentInput: document.getElementById('note-content-input'),
     noteCategoryInput: document.getElementById('note-category-input'),
     noteSourceInput: document.getElementById('note-source-input'),
-    recentFilter: document.getElementById('recent-filter'),
+    confirmDialog: document.getElementById('confirm-dialog'),
+    confirmEyebrow: document.getElementById('confirm-eyebrow'),
+    confirmTitle: document.getElementById('confirm-title'),
+    confirmMessage: document.getElementById('confirm-message'),
+    confirmCancel: document.getElementById('confirm-cancel'),
+    confirmSubmit: document.getElementById('confirm-submit'),
     toast: document.getElementById('toast')
   });
 }
@@ -77,6 +81,7 @@ function bindEvents() {
   DOM.clearBtn.addEventListener('click', clearVisibleNotes);
   DOM.exportBtn.addEventListener('click', openExportDialog);
   document.addEventListener('keydown', handleShortcuts);
+  document.addEventListener('click', closeCategoryMenus);
 
   DOM.exportDialogClose.addEventListener('click', closeExportDialog);
   DOM.exportCancel.addEventListener('click', closeExportDialog);
@@ -112,13 +117,6 @@ function bindEvents() {
     openCategoryDialog();
   });
 
-  DOM.recentFilter.addEventListener('click', () => {
-    state.recentOnly = !state.recentOnly;
-    state.activeCategory = 'all';
-    DOM.recentFilter.classList.toggle('selected', state.recentOnly);
-    render();
-  });
-
   document.querySelectorAll('[data-close-dialog]').forEach(button => {
     button.addEventListener('click', () => document.getElementById(button.dataset.closeDialog).close());
   });
@@ -127,6 +125,10 @@ function bindEvents() {
     dialog.addEventListener('click', event => {
       if (event.target === dialog) dialog.close();
     });
+  });
+
+  DOM.confirmDialog.addEventListener('click', event => {
+    if (event.target === DOM.confirmDialog) DOM.confirmDialog.close('cancel');
   });
 }
 
@@ -161,7 +163,7 @@ function renderCategories() {
 function categoryButton(id, label, count, color, isAll = false) {
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = `category-item${!state.recentOnly && state.activeCategory === id ? ' selected' : ''}`;
+  button.className = `category-item${state.activeCategory === id ? ' selected' : ''}`;
   button.dataset.categoryId = id;
 
   if (isAll) {
@@ -188,7 +190,7 @@ function renderPills() {
   categories.forEach(category => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = `filter-pill${!state.recentOnly && state.activeCategory === category.id ? ' active' : ''}`;
+    button.className = `filter-pill${state.activeCategory === category.id ? ' active' : ''}`;
     const count = category.id === 'all' ? state.notes.length : countForCategory(category.id);
     button.append(document.createTextNode(category.name));
     const number = document.createElement('b');
@@ -267,15 +269,45 @@ function createNoteCard(note) {
 
   }
 
-  const picker = document.createElement('label');
+  const picker = document.createElement('div');
   picker.className = 'category-picker';
-  picker.title = '移动分类';
-  picker.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h6l2 2h10v10H3z"></path></svg>';
-  const select = document.createElement('select');
-  select.setAttribute('aria-label', '移动分类');
-  populateCategorySelect(select, note.categoryId || '');
-  select.addEventListener('change', () => moveNoteToCategory(note.id, select.value));
-  picker.appendChild(select);
+  const pickerButton = document.createElement('button');
+  pickerButton.type = 'button';
+  pickerButton.className = 'category-picker-trigger';
+  pickerButton.setAttribute('aria-label', `移动分类，当前为${categoryName}`);
+  pickerButton.setAttribute('aria-haspopup', 'menu');
+  pickerButton.setAttribute('aria-expanded', 'false');
+  pickerButton.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h6l2 2h10v10H3z"></path></svg><span>${escapeHtml(categoryName)}</span>`;
+
+  const pickerMenu = document.createElement('div');
+  pickerMenu.className = 'category-picker-menu';
+  pickerMenu.setAttribute('role', 'menu');
+  const choices = [{ id: '', name: '未分类', color: '#aeaeb2' }, ...state.categories];
+  choices.forEach(choice => {
+    const option = document.createElement('button');
+    option.type = 'button';
+    option.className = `category-picker-option${(note.categoryId || '') === choice.id ? ' selected' : ''}`;
+    option.setAttribute('role', 'menuitemradio');
+    option.setAttribute('aria-checked', String((note.categoryId || '') === choice.id));
+    option.innerHTML = `<span class="category-option-dot" style="background:${choice.color}"></span><span>${escapeHtml(choice.name)}</span>`;
+    option.addEventListener('click', event => {
+      event.stopPropagation();
+      closeCategoryMenus();
+      if ((note.categoryId || '') !== choice.id) moveNoteToCategory(note.id, choice.id);
+    });
+    pickerMenu.appendChild(option);
+  });
+
+  pickerButton.addEventListener('click', event => {
+    event.stopPropagation();
+    const willOpen = !picker.classList.contains('open');
+    closeCategoryMenus();
+    picker.classList.toggle('open', willOpen);
+    card.classList.toggle('menu-open', willOpen);
+    pickerButton.setAttribute('aria-expanded', String(willOpen));
+    if (willOpen) pickerMenu.querySelector('.selected')?.focus();
+  });
+  picker.append(pickerButton, pickerMenu);
   meta.appendChild(picker);
 
   card.append(header, content, meta);
@@ -296,8 +328,6 @@ function populateCategorySelect(select, selectedValue) {
 
 function selectCategory(categoryId) {
   state.activeCategory = categoryId;
-  state.recentOnly = false;
-  DOM.recentFilter.classList.remove('selected');
   render();
 }
 
@@ -306,7 +336,6 @@ function getVisibleNotes() {
   if (state.activeCategory === 'uncategorized') notes = notes.filter(note => !note.categoryId || !findCategory(note.categoryId));
   else if (state.activeCategory !== 'all') notes = notes.filter(note => note.categoryId === state.activeCategory);
 
-  if (state.recentOnly) notes = notes.slice(0, 10);
   if (state.search) {
     notes = notes.filter(note => {
       const category = findCategory(note.categoryId);
@@ -319,8 +348,7 @@ function getVisibleNotes() {
 
 function updatePageHeading(visibleCount) {
   let title = '全部笔记';
-  if (state.recentOnly) title = '最近添加';
-  else if (state.activeCategory === 'uncategorized') title = '未分类';
+  if (state.activeCategory === 'uncategorized') title = '未分类';
   else if (state.activeCategory !== 'all') title = findCategory(state.activeCategory)?.name || '全部笔记';
 
   DOM.viewTitle.textContent = title;
@@ -432,7 +460,17 @@ async function updateCategory(categoryId, changes) {
 
 async function deleteCategory(categoryId) {
   const category = findCategory(categoryId);
-  if (!category || !confirm(`确定删除分类“${category.name}”吗？其中的笔记会移至“未分类”。`)) return;
+  if (!category) return;
+  const noteCount = countForCategory(categoryId);
+  const confirmed = await showConfirm({
+    eyebrow: '删除分类',
+    title: `删除“${category.name}”？`,
+    message: noteCount
+      ? `分类中的 ${noteCount} 条笔记会移至“未分类”，笔记内容不会被删除。`
+      : '这个分类中没有笔记。删除分类后无法撤销。',
+    confirmLabel: '删除分类'
+  });
+  if (!confirmed) return;
   state.categories = state.categories.filter(item => item.id !== categoryId);
   state.notes = state.notes.map(note => note.categoryId === categoryId ? { ...note, categoryId: null } : note);
   if (state.activeCategory === categoryId) state.activeCategory = 'uncategorized';
@@ -488,7 +526,15 @@ async function updateNoteContent(noteId, newContent) {
 }
 
 async function deleteNote(noteId) {
-  if (!confirm('确定删除这条笔记吗？')) return;
+  const note = state.notes.find(item => String(item.id) === String(noteId));
+  if (!note) return;
+  const confirmed = await showConfirm({
+    eyebrow: '删除笔记',
+    title: '删除这条笔记？',
+    message: '笔记删除后无法恢复，请确认是否继续。',
+    confirmLabel: '删除笔记'
+  });
+  if (!confirmed) return;
   state.notes = state.notes.filter(note => String(note.id) !== String(noteId));
   await storageSet({ notes: state.notes });
   render();
@@ -498,8 +544,14 @@ async function deleteNote(noteId) {
 async function clearVisibleNotes() {
   const visibleNotes = getVisibleNotes();
   if (!visibleNotes.length) return;
-  const scope = state.activeCategory === 'all' && !state.search && !state.recentOnly ? '所有笔记' : `当前视图中的 ${visibleNotes.length} 条笔记`;
-  if (!confirm(`确定清空${scope}吗？此操作不可恢复。`)) return;
+  const scope = state.activeCategory === 'all' && !state.search ? '所有笔记' : `当前视图中的 ${visibleNotes.length} 条笔记`;
+  const confirmed = await showConfirm({
+    eyebrow: '批量删除',
+    title: `清空${scope}？`,
+    message: `即将永久删除 ${visibleNotes.length} 条笔记，此操作无法撤销。`,
+    confirmLabel: '确认清空'
+  });
+  if (!confirmed) return;
   const visibleIds = new Set(visibleNotes.map(note => String(note.id)));
   state.notes = state.notes.filter(note => !visibleIds.has(String(note.id)));
   await storageSet({ notes: state.notes });
@@ -512,6 +564,19 @@ function handleShortcuts(event) {
     event.preventDefault();
     DOM.searchInput.focus();
   }
+  if (event.key === 'Escape') {
+    const openPicker = document.querySelector('.category-picker.open');
+    closeCategoryMenus();
+    openPicker?.querySelector('.category-picker-trigger')?.focus();
+  }
+}
+
+function closeCategoryMenus() {
+  document.querySelectorAll('.category-picker.open').forEach(picker => {
+    picker.classList.remove('open');
+    picker.closest('.note-card')?.classList.remove('menu-open');
+    picker.querySelector('.category-picker-trigger')?.setAttribute('aria-expanded', 'false');
+  });
 }
 
 function openExportDialog() {
@@ -822,6 +887,31 @@ function showToast(message) {
   DOM.toast.textContent = message;
   DOM.toast.classList.add('show');
   toastTimer = setTimeout(() => DOM.toast.classList.remove('show'), 1800);
+}
+
+function showConfirm({ eyebrow = '操作确认', title, message, confirmLabel = '确认' }) {
+  if (DOM.confirmDialog.open) return Promise.resolve(false);
+
+  const previousFocus = document.activeElement;
+  DOM.confirmEyebrow.textContent = eyebrow;
+  DOM.confirmTitle.textContent = title;
+  DOM.confirmMessage.textContent = message;
+  DOM.confirmSubmit.textContent = confirmLabel;
+  DOM.confirmDialog.returnValue = 'cancel';
+  DOM.confirmDialog.showModal();
+  requestAnimationFrame(() => DOM.confirmCancel.focus());
+
+  return new Promise(resolve => {
+    DOM.confirmDialog.addEventListener('close', () => {
+      const confirmed = DOM.confirmDialog.returnValue === 'confirm';
+      if (previousFocus instanceof HTMLElement) {
+        requestAnimationFrame(() => {
+          if (previousFocus.isConnected) previousFocus.focus();
+        });
+      }
+      resolve(confirmed);
+    }, { once: true });
+  });
 }
 
 function safeUrl(url) {
