@@ -660,20 +660,89 @@ function exportAsTxt() {
 
 function exportAsWord() {
   const options = getExportOptions();
-  const notesHtml = getVisibleNotes().map(note => {
+  const model = getExportModel();
+  const html = buildWordDocument(model, options);
+  downloadFile(new Blob(['\ufeff', html], { type: 'application/msword;charset=utf-8' }), `${model.title}.doc`);
+}
+
+function buildWordDocument(model, options) {
+  const fontFamily = options.fontFamily === 'serif'
+    ? 'SimSun, "Songti SC", serif'
+    : '"Microsoft YaHei", "Segoe UI", sans-serif';
+  const fontSize = Math.max(9, Math.round(options.fontSize * .82));
+  const lineHeight = { compact: 1.5, comfortable: 1.72, relaxed: 1.95 }[options.lineHeight] || 1.72;
+  const margin = { compact: '1.35cm', standard: '1.9cm', wide: '2.55cm' }[options.margin] || '1.9cm';
+  const paper = {
+    a4: ['21cm', '29.7cm'],
+    letter: ['21.59cm', '27.94cm'],
+    a5: ['14.8cm', '21cm']
+  }[options.paperSize] || ['21cm', '29.7cm'];
+  const paperSize = options.orientation === 'landscape' ? `${paper[1]} ${paper[0]}` : `${paper[0]} ${paper[1]}`;
+  const templateClass = ['minimal', 'manuscript', 'cards'].includes(options.template) ? options.template : 'minimal';
+
+  const notesHtml = model.notes.map(note => {
+    const category = note.category;
+    const categoryName = category?.name || '未分类';
+    const categoryColor = /^#[0-9a-f]{6}$/i.test(category?.color || '') ? category.color : '#8e8e93';
+    const sourceUrl = safeUrl(note.sourceUrl);
+    const sourceText = escapeHtml(note.sourceTitle || note.sourceUrl || '未知来源');
+    const sourceHtml = sourceUrl !== '#'
+      ? `<a href="${escapeHtml(sourceUrl)}">${sourceText}</a>`
+      : sourceText;
     const meta = [];
-    if (options.category) meta.push(`分类：${escapeHtml(findCategory(note.categoryId)?.name || '未分类')}`);
-    if (options.time) meta.push(`时间：${escapeHtml(note.timestamp || '')}`);
-    if (options.source && (note.sourceTitle || note.sourceUrl)) meta.push(`来源：${escapeHtml(note.sourceTitle || note.sourceUrl)}`);
-    return `<article><div class="content">${escapeHtml(note.content || '').replace(/\n/g, '<br>')}</div><div class="meta">${meta.join('<br>')}</div></article>`;
+    if (options.time) meta.push(`<span>${escapeHtml(note.timestamp || '时间未知')}</span>`);
+    if (options.source && (note.sourceTitle || note.sourceUrl)) meta.push(`<span>来自：${sourceHtml}</span>`);
+    const categoryHtml = options.category
+      ? `<div class="category" style="color:${categoryColor};background:${hexToWordTint(categoryColor)}"><b style="background:${categoryColor}"></b>${escapeHtml(categoryName)}</div>`
+      : '';
+    return `<div class="note ${templateClass}" style="border-left-color:${categoryColor}">
+      ${categoryHtml}
+      <div class="content">${escapeHtml(note.content || '').replace(/\r?\n/g, '<br>')}</div>
+      ${meta.length ? `<div class="meta">${meta.join('<span class="dot">·</span>')}</div>` : ''}
+    </div>`;
   }).join('');
-  const html = `<!doctype html><html><head><meta charset="UTF-8"><style>body{font-family:"Microsoft YaHei","Segoe UI",sans-serif;margin:1in;color:#1d1d1f}h1{font-size:20pt}article{margin:0 0 24pt;page-break-inside:avoid}.content{font-size:12pt;line-height:1.7}.meta{margin-top:7pt;color:#666;font-size:9pt;line-height:1.6}</style></head><body><h1>${escapeHtml(DOM.viewTitle.textContent)}</h1>${notesHtml}</body></html>`;
-  downloadFile(new Blob([html], { type: 'application/msword;charset=utf-8' }), '句存笔记.doc');
+
+  const title = escapeHtml(model.title || '句存笔记');
+  const date = new Date();
+  const exportedAt = `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+  return `<!doctype html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" lang="zh-CN">
+<head><meta charset="UTF-8"><title>${title}</title><style>
+@page WordSection1{size:${paperSize};margin:${margin}}
+body{margin:0;color:#1d1d1f;background:#fff;font-family:${fontFamily}}
+.WordSection1{page:WordSection1}
+.document-header{margin:0 0 26pt;padding:0 0 17pt;border-bottom:2pt solid #0071e3}
+.brandline{margin:0 0 8pt;color:#0071e3;font-size:8.5pt;font-weight:700;letter-spacing:.7pt}
+h1{margin:0 0 7pt;font-size:25pt;line-height:1.15;letter-spacing:-.5pt}
+.summary{margin:0;color:#8e8e93;font-size:9pt}
+.note{margin:0 0 17pt;page-break-inside:avoid}
+.note.minimal{padding:4pt 0 16pt;border-bottom:1pt solid #e8e8eb}
+.note.manuscript{padding:10pt 12pt 12pt 15pt;border-left:3pt solid #0071e3;background:#fbfbfc}
+.note.cards{padding:15pt;border:1pt solid #e5e5e8;border-left:3pt solid #0071e3;background:#f8f9fb}
+.category{display:inline-block;margin:0 0 9pt;padding:3pt 8pt;font-size:8.5pt;font-weight:700}
+.category b{display:inline-block;width:5pt;height:5pt;margin-right:5pt}
+.content{font-size:${fontSize}pt;line-height:${lineHeight};color:#2c2c2e}
+.meta{margin-top:11pt;padding-top:8pt;border-top:1pt solid #ececef;color:#8e8e93;font-size:8.5pt;line-height:1.5}
+.meta .dot{padding:0 7pt;color:#c7c7cc}
+a{color:#176fc1;text-decoration:underline}
+.document-footer{margin-top:20pt;padding-top:10pt;border-top:1pt solid #ececef;color:#aeaeb2;font-size:8pt;text-align:right}
+</style></head>
+<body><div class="WordSection1">
+  <div class="document-header"><p class="brandline">句存 · 笔记导出</p><h1>${title}</h1><p class="summary">共 ${model.notes.length} 条笔记 · 导出于 ${exportedAt}</p></div>
+  ${notesHtml}
+  <div class="document-footer">由句存在本地生成</div>
+</div></body></html>`;
+}
+
+function hexToWordTint(hex) {
+  const number = Number.parseInt(hex.slice(1), 16);
+  const channels = [(number >> 16) & 255, (number >> 8) & 255, number & 255];
+  return `rgb(${channels.map(channel => Math.round(channel + (255 - channel) * .9)).join(',')})`;
 }
 
 async function exportAsPdf() {
   const rendered = window.JucunPdf.renderDocument(getExportModel(), getExportOptions(), 1.5);
-  const blob = await window.JucunPdf.buildPdf(rendered.canvases, rendered.page);
+  const blob = await window.JucunPdf.buildPdf(rendered.canvases, rendered.page, rendered.links);
   downloadFile(blob, `${DOM.viewTitle.textContent || '句存笔记'}.pdf`);
 }
 

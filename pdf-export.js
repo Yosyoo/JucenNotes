@@ -34,7 +34,7 @@
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, page.width, page.height);
-      current = { canvas, ctx };
+      current = { canvas, ctx, links: [] };
       pages.push(current);
       y = drawPageHeader(ctx, model, options, page, margin, pages.length);
       return current;
@@ -98,7 +98,8 @@
           showTime: options.time && finishes,
           showSource: options.source && finishes,
           continuation: !firstChunk,
-          finishes
+          finishes,
+          links: current.links
         });
 
         y += chunkHeight + (options.template === 'cards' ? 14 : 10);
@@ -112,7 +113,11 @@
     });
 
     pages.forEach((item, index) => drawPageFooter(item.ctx, options, page, margin, index + 1, pages.length));
-    return { canvases: pages.map(item => item.canvas), page };
+    return {
+      canvases: pages.map(item => item.canvas),
+      links: pages.map(item => item.links),
+      page
+    };
   }
 
   function getPageSize(options) {
@@ -185,13 +190,41 @@
 
     if (layout.finishes && (layout.showTime || layout.showSource)) {
       cursorY += 8;
-      setFont(ctx, Math.max(9, fontSize - 4), 400, SANS_FONT);
+      const metaSize = Math.max(9, fontSize - 4);
+      const baseline = cursorY + 10;
+      const maxX = innerX + width - horizontalPadding * 2;
+      let metaX = innerX;
+      setFont(ctx, metaSize, 400, SANS_FONT);
       ctx.fillStyle = '#9a9aa0';
-      const pieces = [];
-      if (layout.showTime) pieces.push(note.timestamp || '时间未知');
-      if (layout.showSource && (note.sourceTitle || note.sourceUrl)) pieces.push(`来源：${note.sourceTitle || note.sourceUrl}`);
-      const meta = truncateText(ctx, pieces.join('  ·  '), width - horizontalPadding * 2);
-      ctx.fillText(meta, innerX, cursorY + 10);
+      if (layout.showTime) {
+        const timeText = note.timestamp || '时间未知';
+        ctx.fillText(timeText, metaX, baseline);
+        metaX += ctx.measureText(timeText).width;
+      }
+      if (layout.showSource && (note.sourceTitle || note.sourceUrl)) {
+        if (layout.showTime) {
+          ctx.fillStyle = '#c4c4c8';
+          ctx.fillText('  ·  ', metaX, baseline);
+          metaX += ctx.measureText('  ·  ').width;
+        }
+        ctx.fillStyle = '#9a9aa0';
+        ctx.fillText('来自：', metaX, baseline);
+        metaX += ctx.measureText('来自：').width;
+        const sourceText = truncateText(ctx, note.sourceTitle || note.sourceUrl, Math.max(24, maxX - metaX));
+        const sourceWidth = ctx.measureText(sourceText).width;
+        ctx.fillStyle = '#2676c8';
+        ctx.fillText(sourceText, metaX, baseline);
+        if (normalizeLinkUrl(note.sourceUrl)) {
+          ctx.fillRect(metaX, baseline + 2, sourceWidth, .7);
+          layout.links.push({
+            url: normalizeLinkUrl(note.sourceUrl),
+            x: metaX,
+            y: baseline - metaSize,
+            width: sourceWidth,
+            height: metaSize + 4
+          });
+        }
+      }
     }
 
     if (template === 'minimal' && layout.finishes) {
@@ -281,7 +314,17 @@
     return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
   }
 
-  async function buildPdf(canvases, page) {
+  function normalizeLinkUrl(url) {
+    if (!url) return '';
+    try {
+      const parsed = new URL(url);
+      return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : '';
+    } catch {
+      return '';
+    }
+  }
+
+  async function buildPdf(canvases, page, linksByPage = []) {
     const images = await Promise.all(canvases.map(canvas => canvasToJpeg(canvas)));
     const encoder = new TextEncoder();
     const chunks = [];
@@ -306,7 +349,13 @@
     }
 
     append('%PDF-1.4\n%JUCUN\n');
-    const objectCount = 2 + images.length * 3;
+    const annotationStart = 3 + images.length * 3;
+    let nextAnnotationObject = annotationStart;
+    const pageAnnotations = images.map((_, pageIndex) => (linksByPage[pageIndex] || []).map(link => ({
+      link,
+      objectNumber: nextAnnotationObject++
+    })));
+    const objectCount = nextAnnotationObject - 1;
     addObject(1, '<< /Type /Catalog /Pages 2 0 R >>');
     const pageRefs = images.map((_, index) => `${3 + index * 3} 0 R`).join(' ');
     addObject(2, `<< /Type /Pages /Kids [${pageRefs}] /Count ${images.length} >>`);
@@ -316,9 +365,22 @@
       const imageObject = pageObject + 1;
       const contentObject = pageObject + 2;
       const content = encoder.encode(`q\n${page.pdfWidth.toFixed(2)} 0 0 ${page.pdfHeight.toFixed(2)} 0 0 cm\n/Im0 Do\nQ`);
-      addObject(pageObject, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${page.pdfWidth.toFixed(2)} ${page.pdfHeight.toFixed(2)}] /Resources << /XObject << /Im0 ${imageObject} 0 R >> >> /Contents ${contentObject} 0 R >>`);
+      const annotations = pageAnnotations[index];
+      const annotsEntry = annotations.length ? ` /Annots [${annotations.map(item => `${item.objectNumber} 0 R`).join(' ')}]` : '';
+      addObject(pageObject, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${page.pdfWidth.toFixed(2)} ${page.pdfHeight.toFixed(2)}] /Resources << /XObject << /Im0 ${imageObject} 0 R >> >> /Contents ${contentObject} 0 R${annotsEntry} >>`);
       addObject(imageObject, `<< /Type /XObject /Subtype /Image /Width ${image.width} /Height ${image.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${image.bytes.length} >>`, image.bytes);
       addObject(contentObject, `<< /Length ${content.length} >>`, content);
+    });
+
+    pageAnnotations.flat().forEach(({ link, objectNumber }) => {
+      const xScale = page.pdfWidth / page.width;
+      const yScale = page.pdfHeight / page.height;
+      const x1 = Math.max(0, link.x * xScale);
+      const y1 = Math.max(0, page.pdfHeight - (link.y + link.height) * yScale);
+      const x2 = Math.min(page.pdfWidth, (link.x + link.width) * xScale);
+      const y2 = Math.min(page.pdfHeight, page.pdfHeight - link.y * yScale);
+      const uri = encodeURI(link.url).replace(/[\\()]/g, '\\$&');
+      addObject(objectNumber, `<< /Type /Annot /Subtype /Link /Rect [${x1.toFixed(2)} ${y1.toFixed(2)} ${x2.toFixed(2)} ${y2.toFixed(2)}] /Border [0 0 0] /C [0 .443 .89] /H /I /A << /S /URI /URI (${uri}) >> >>`);
     });
 
     const xrefOffset = length;
