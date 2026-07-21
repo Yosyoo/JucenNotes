@@ -2,7 +2,7 @@
 
 一个优雅高效的 Chrome 扩展，用于快速收藏、分类整理网页内容，支持搜索与多格式导出。
 
-![License](https://img.shields.io/badge/license-MIT-green) ![Version](https://img.shields.io/badge/version-1.2.0-blue)
+![License](https://img.shields.io/badge/license-MIT-green) ![Version](https://img.shields.io/badge/version-2.0.0-blue)
 
 ## 📋 功能特性
 
